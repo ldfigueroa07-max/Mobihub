@@ -1,0 +1,1955 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobihub</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Códigos QR por unidad: generación (qrcodejs) y lectura por cámara (html5-qrcode). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<!-- Firebase (compat SDK): misma forma de API que el capability "db" de
+     Claude Artifacts (collection/doc/set/update/onSnapshot), así que el
+     resto del código de abajo casi no cambió al migrar. -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<!-- Config de tu proyecto Firebase — ver README.md para completarla. -->
+<script src="firebase-config.js"></script>
+<!-- Datos reales del catálogo (ver seed-data.js) para la primera carga. -->
+<script src="seed-data.js"></script>
+<style>
+  :root{
+    --bg:#F5F6F8;
+    --surface:#FFFFFF;
+    --surface-alt:#EDF1F3;
+    --ink:#1B242F;
+    --muted:#5B6672;
+    --border:#DCE2E7;
+    --accent:#1E6E77;
+    --accent-ink:#0D3B40;
+    --accent-soft:#E1EFEE;
+    --accent-contrast:#FFFFFF;
+    --ok:#2F8558; --ok-soft:#E4F3EA; --ok-ink:#1E5B3B;
+    --warn:#B07E28; --warn-soft:#FBF0DA; --warn-ink:#6E4E14;
+    --info:#3E6FA6; --info-soft:#E7EFF9; --info-ink:#264A70;
+    --danger:#B5442E; --danger-soft:#FBE8E3; --danger-ink:#7A2E1D;
+    --shadow: 0 1px 2px rgba(27,36,47,.06), 0 8px 24px -12px rgba(27,36,47,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#10171C;
+      --surface:#182126;
+      --surface-alt:#1F2A30;
+      --ink:#E7EDEE;
+      --muted:#93A1A9;
+      --border:#2A363D;
+      --accent:#57BEC3;
+      --accent-ink:#D8F3F2;
+      --accent-soft:#1D3A3B;
+      --accent-contrast:#06211F;
+      --ok:#59B981; --ok-soft:#173423; --ok-ink:#B7EAC9;
+      --warn:#DDAE5F; --warn-soft:#3A2C13; --warn-ink:#F2DBAA;
+      --info:#7FAADA; --info-soft:#182B3D; --info-ink:#CBDFF5;
+      --danger:#E1806A; --danger-soft:#3A1D16; --danger-ink:#F5C9BC;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#10171C;
+    --surface:#182126;
+    --surface-alt:#1F2A30;
+    --ink:#E7EDEE;
+    --muted:#93A1A9;
+    --border:#2A363D;
+    --accent:#57BEC3;
+    --accent-ink:#D8F3F2;
+    --accent-soft:#1D3A3B;
+    --accent-contrast:#06211F;
+    --ok:#59B981; --ok-soft:#173423; --ok-ink:#B7EAC9;
+    --warn:#DDAE5F; --warn-soft:#3A2C13; --warn-ink:#F2DBAA;
+    --info:#7FAADA; --info-soft:#182B3D; --info-ink:#CBDFF5;
+    --danger:#E1806A; --danger-soft:#3A1D16; --danger-ink:#F5C9BC;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--ink); font-family:"Public Sans", -apple-system, "Segoe UI", sans-serif; line-height:1.45;}
+  h1,h2,h3,.display{font-family:"Barlow Semi Condensed","Arial Narrow",sans-serif; letter-spacing:.2px;}
+  .mono{font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, monospace; font-variant-numeric:tabular-nums;}
+  button, input, select, textarea{font-family:inherit; font-size:inherit; color:inherit;}
+  button{cursor:pointer;}
+  a{color:var(--accent);}
+  ::selection{background:var(--accent-soft); color:var(--accent-ink);}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important; animation:none !important;} }
+
+  .app-shell{max-width:1180px; margin:0 auto; padding:20px 20px 64px;}
+
+  /* header */
+  header.top{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-bottom:16px; border-bottom:1px solid var(--border); margin-bottom:18px;}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{width:36px; height:36px; border-radius:9px; background:var(--accent); color:var(--accent-contrast); display:flex; align-items:center; justify-content:center; font-size:19px; flex:none;}
+  .brand-text h1{font-size:1.35rem; font-weight:700; margin:0; text-wrap:balance;}
+  .brand-text p{margin:0; font-size:.78rem; color:var(--muted);}
+  .who{display:flex; align-items:center; gap:10px; font-size:.85rem;}
+  .who-pill{display:flex; align-items:center; gap:6px; background:var(--surface-alt); border:1px solid var(--border); border-radius:999px; padding:6px 12px;}
+  .who-pill .dot{width:7px; height:7px; border-radius:50%; background:var(--accent);}
+  .link-btn{background:none; border:none; color:var(--accent); font-weight:600; font-size:.8rem; padding:2px 4px;}
+  .who-edit{display:flex; align-items:center; gap:6px;}
+  .who-edit input{border:1px solid var(--border); border-radius:7px; padding:5px 8px; background:var(--surface);}
+
+  .local-badge{font-size:.72rem; background:var(--warn-soft); color:var(--warn-ink); border-radius:999px; padding:3px 10px; font-weight:600;}
+
+  /* nav */
+  nav.tabs{display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--border);}
+  nav.tabs button{background:none; border:none; padding:10px 16px; font-weight:600; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; font-size:.92rem;}
+  nav.tabs button.active{color:var(--accent-ink); border-bottom-color:var(--accent);}
+  nav.tabs button:hover{color:var(--ink);}
+
+  .notice{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; background:var(--accent-soft); color:var(--accent-ink); border:1px solid var(--accent); border-radius:10px; padding:10px 14px; margin-bottom:18px; font-size:.85rem;}
+  .notice button{background:none; border:none; color:var(--accent-ink); font-weight:700; font-size:1rem; line-height:1; flex:none;}
+
+  section{margin-bottom:30px;}
+  section > h2{font-size:1.05rem; font-weight:700; margin:0 0 12px;}
+  .section-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap;}
+  .section-head h2{margin:0;}
+  .muted{color:var(--muted);}
+
+  /* KPIs */
+  .kpi-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:12px;}
+  .kpi{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 16px 14px; box-shadow:var(--shadow);}
+  .kpi .label{font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600;}
+  .kpi .value{font-size:1.9rem; font-weight:600; margin-top:6px;}
+  .kpi .sub{font-size:.76rem; color:var(--muted); margin-top:3px;}
+  .kpi.alert .value{color:var(--warn-ink);}
+
+  /* buttons */
+  .btn{border-radius:8px; padding:9px 15px; font-weight:600; font-size:.85rem; border:1px solid transparent; display:inline-flex; align-items:center; gap:6px;}
+  .btn-primary{background:var(--accent); color:var(--accent-contrast);}
+  .btn-primary:hover{filter:brightness(1.06);}
+  .btn-secondary{background:var(--surface); border-color:var(--border); color:var(--ink);}
+  .btn-secondary:hover{background:var(--surface-alt);}
+  .btn-text{background:none; border:none; color:var(--accent); font-weight:600; padding:4px 6px;}
+  .btn-danger-text{background:none; border:none; color:var(--danger); font-weight:600; padding:4px 6px; font-size:.8rem;}
+  .btn-sm{padding:5px 10px; font-size:.78rem;}
+  .icon-btn{background:none; border:1px solid var(--border); border-radius:7px; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; color:var(--muted);}
+  .icon-btn:hover{color:var(--ink); background:var(--surface-alt);}
+
+  /* pills */
+  .pill{display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:3px 10px; font-size:.74rem; font-weight:700;}
+  .pill-warn{background:var(--warn-soft); color:var(--warn-ink);}
+  .pill-info{background:var(--info-soft); color:var(--info-ink);}
+  .pill-accent{background:var(--accent-soft); color:var(--accent-ink);}
+  .pill-ok{background:var(--ok-soft); color:var(--ok-ink);}
+  .pill-danger{background:var(--danger-soft); color:var(--danger-ink);}
+
+  /* inventory table */
+  .table-wrap{overflow-x:auto; background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow);}
+  table{border-collapse:collapse; width:100%; min-width:640px;}
+  thead th{text-align:left; font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; padding:10px 14px; border-bottom:1px solid var(--border); white-space:nowrap;}
+  tbody td{padding:11px 14px; border-bottom:1px solid var(--border); font-size:.88rem; vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  td.num{text-align:right;}
+  .item-name{font-weight:600;}
+  .item-unit{color:var(--muted); font-size:.76rem;}
+  .stockbar{width:120px; height:8px; border-radius:99px; background:var(--surface-alt); overflow:hidden; display:flex;}
+  .stockbar span{height:100%; display:block;}
+  .stockbar .seg-out{background:var(--accent);}
+  .stockbar .seg-committed{background:var(--warn);}
+  .stockbar .seg-oos{background:var(--muted);}
+  .oos-breakdown{color:var(--muted); font-size:.74rem; margin-top:1px;}
+  .qty-edit{display:flex; align-items:center; gap:6px; justify-content:flex-end;}
+  .qty-edit input{width:70px; text-align:right; border:1px solid var(--border); border-radius:6px; padding:4px 6px; background:var(--surface);}
+
+  /* reservations */
+  .res-toolbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .res-toolbar select, .res-toolbar input[type=search]{border:1px solid var(--border); border-radius:7px; padding:7px 10px; background:var(--surface);}
+  .deposito-bar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px;}
+  .deposito-bar select{border:1px solid var(--border); border-radius:7px; padding:7px 10px; background:var(--surface);}
+  .res-list{display:flex; flex-direction:column; gap:10px;}
+  .res-card{background:var(--surface); border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:10px; box-shadow:var(--shadow); padding:14px 16px; display:grid; grid-template-columns:1.6fr 1fr 1.4fr auto; gap:16px; align-items:start;}
+  .res-card.status-pendiente{border-left-color:var(--warn);}
+  .res-card.status-confirmada{border-left-color:var(--info);}
+  .res-card.status-en_evento{border-left-color:var(--accent);}
+  .res-card.status-devuelta{border-left-color:var(--ok);}
+  .res-card.status-cancelada{border-left-color:var(--danger); opacity:.72;}
+  .res-title{font-weight:700; font-size:.98rem;}
+  .res-client{color:var(--muted); font-size:.82rem; margin-top:1px;}
+  .res-dates{font-size:.85rem;}
+  .res-address{color:var(--muted); font-size:.78rem; margin-top:3px;}
+  .chip-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+  .chip{background:var(--surface-alt); border-radius:7px; padding:3px 8px; font-size:.74rem; color:var(--ink);}
+  .chip b{font-family:"IBM Plex Mono",monospace;}
+  .res-actions{display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
+  .res-actions select{border:1px solid var(--border); border-radius:7px; padding:5px 8px; background:var(--surface); font-size:.8rem; font-weight:600;}
+  .empty-state{padding:28px; text-align:center; color:var(--muted); background:var(--surface); border:1px dashed var(--border); border-radius:12px; font-size:.88rem;}
+
+  /* toasts */
+  .toast-wrap{position:fixed; right:16px; bottom:16px; z-index:80; display:flex; flex-direction:column; gap:8px; max-width:320px;}
+  .toast{background:var(--surface); color:var(--ink); border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:9px; padding:10px 14px; font-size:.82rem; box-shadow:var(--shadow); opacity:0; transform:translateY(6px); transition:opacity .18s, transform .18s;}
+  .toast.show{opacity:1; transform:translateY(0);}
+  .toast.error{border-left-color:var(--danger);}
+
+  /* modal */
+  .modal-backdrop{position:fixed; inset:0; background:rgba(10,14,17,.55); display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; z-index:50; overflow-y:auto;}
+  .modal{background:var(--surface); border-radius:14px; width:100%; max-width:560px; padding:22px 24px 24px; box-shadow:0 20px 60px -12px rgba(0,0,0,.4); border:1px solid var(--border);}
+  .modal-lg{max-width:760px;}
+  .modal h3{margin:0 0 4px; font-size:1.15rem;}
+  .modal .modal-sub{color:var(--muted); font-size:.82rem; margin:0 0 16px;}
+  .field{display:flex; flex-direction:column; gap:5px; margin-bottom:13px;}
+  .field label{font-size:.76rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+  .field input, .field select, .field textarea{border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:var(--bg); width:100%;}
+  .field textarea{resize:vertical; min-height:56px;}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .field-row-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;}
+  .field-section-label{font-size:.76rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:4px 0 2px;}
+  .field-hint{font-size:.76rem; color:var(--muted); margin:-6px 0 12px;}
+  .item-row{display:grid; grid-template-columns:1.6fr .7fr auto; gap:8px; align-items:center; margin-bottom:8px;}
+  .item-row .avail-hint{grid-column:1 / -1; font-size:.74rem; color:var(--muted); margin-top:-3px;}
+  .item-row .avail-hint.warn{color:var(--warn-ink); font-weight:600;}
+  .remove-row{background:none; border:1px solid var(--border); border-radius:7px; width:32px; height:32px; color:var(--danger); font-size:1rem; line-height:1;}
+  .modal-footer{display:flex; justify-content:flex-end; gap:10px; margin-top:18px; padding-top:16px; border-top:1px solid var(--border);}
+  .form-error{background:var(--danger-soft); color:var(--danger-ink); border-radius:8px; padding:8px 12px; font-size:.82rem; margin-bottom:12px;}
+  .form-note{background:var(--warn-soft); color:var(--warn-ink); border-radius:8px; padding:8px 12px; font-size:.8rem; margin-bottom:12px;}
+
+  /* ficha de producto */
+  .photo-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:8px;}
+  .photo-tile{position:relative; aspect-ratio:4/3; border-radius:9px; overflow:hidden; background:var(--surface-alt); border:1px solid var(--border);}
+  .photo-tile img{width:100%; height:100%; object-fit:cover; display:block;}
+  .photo-tile .photo-remove{position:absolute; top:5px; right:5px; width:24px; height:24px; border-radius:50%; background:rgba(10,14,17,.62); color:#fff; border:none; font-size:.85rem; line-height:1; display:flex; align-items:center; justify-content:center;}
+  .photo-tile .photo-remove:hover{background:rgba(181,68,46,.88);}
+  .photo-tile.uploading{display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:.72rem; text-align:center; padding:6px;}
+  .photo-add{border:1.5px dashed var(--border); border-radius:9px; aspect-ratio:4/3; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; color:var(--muted); background:var(--bg); font-size:.72rem; font-weight:600; text-align:center; cursor:pointer;}
+  .photo-add:hover{border-color:var(--accent); color:var(--accent-ink);}
+  .photo-add input{display:none;}
+  .photo-add .plus{font-size:1.4rem; line-height:1; font-weight:400;}
+  .ficha-tag{display:inline-block; font-size:.72rem; color:var(--muted); background:var(--surface-alt); border-radius:6px; padding:2px 8px; margin-top:2px;}
+
+  /* unidades / códigos QR */
+  .dep-block{border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:14px; background:var(--surface);}
+  .dep-block-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;}
+  .dep-block-head h4{margin:0; font-size:.95rem;}
+  .unit-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:10px;}
+  .unit-tile{border:1px solid var(--border); border-radius:9px; padding:10px; text-align:center; background:var(--bg);}
+  .unit-tile canvas{display:block; margin:0 auto 6px;}
+  .unit-tile .unit-code{font-size:.72rem; margin-bottom:6px;}
+  .unit-tile select{width:100%; font-size:.74rem; padding:4px 5px; border:1px solid var(--border); border-radius:6px; background:var(--surface);}
+  .unit-empty{color:var(--muted); font-size:.82rem; padding:6px 2px;}
+
+  /* escaneo */
+  #qr-reader{border-radius:10px; overflow:hidden; border:1px solid var(--border);}
+  .scan-card{border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-top:12px; background:var(--surface-alt);}
+
+  @media (max-width:760px){
+    .res-card{grid-template-columns:1fr; }
+    .res-actions{flex-direction:row; align-items:center; justify-content:space-between; width:100%; flex-wrap:wrap;}
+    .field-row, .field-row-3{grid-template-columns:1fr;}
+    .photo-grid{grid-template-columns:repeat(2, 1fr);}
+  }
+</style>
+</head>
+<body>
+
+<div class="app-shell" id="app">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-mark">🪑</div>
+      <div class="brand-text">
+        <h1>Mobihub</h1>
+        <p>Stock y reservas de mobiliario para eventos</p>
+      </div>
+    </div>
+    <div class="who" id="who-area"></div>
+  </header>
+
+  <div id="notice-area"></div>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="dashboard" class="active">Dashboard</button>
+    <button data-tab="inventario">Inventario</button>
+    <button data-tab="reservas">Reservas</button>
+  </nav>
+
+  <main id="view"></main>
+</div>
+
+<div id="modal-root"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- utilities ----------
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function padN(n, len){ return String(n).padStart(len,'0'); }
+  function dateStr(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function addDaysStr(base, n){ var d = new Date(base+'T00:00:00'); d.setDate(d.getDate()+n); return dateStr(d); }
+  function today(){ return dateStr(new Date()); }
+  function fmtDate(iso){
+    if(!iso) return '';
+    var d = new Date(iso+'T00:00:00');
+    return d.toLocaleDateString('es-AR', {day:'2-digit', month:'short'});
+  }
+  function fmtRange(s,e){ return s===e ? fmtDate(s) : fmtDate(s)+' – '+fmtDate(e); }
+  function overlap(s1,e1,s2,e2){ return s1<=e2 && s2<=e1; }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function uid(){ return Math.random().toString(36).slice(2,10); }
+  function slugify(s){
+    return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'item';
+  }
+
+  // Redimensiona y comprime una foto en el navegador antes de guardarla
+  // (cada documento del depósito compartido tiene un límite de tamaño).
+  function fileToCompressedDataUrl(file){
+    return new Promise(function(resolve, reject){
+      var looksLikeImage = file && ((file.type && file.type.indexOf('image/') === 0) || /\.(jpe?g|png|gif|webp|bmp|heic|heif)$/i.test(file.name||''));
+      if(!looksLikeImage){ reject(new Error('not-image')); return; }
+      var reader = new FileReader();
+      reader.onerror = function(){ reject(new Error('read-failed')); };
+      reader.onload = function(){
+        var img = new Image();
+        img.onerror = function(){ reject(new Error('decode-failed')); };
+        img.onload = function(){
+          var attempts = [[1400,0.78],[1100,0.70],[850,0.62],[650,0.55]];
+          var best = null;
+          for(var i=0;i<attempts.length;i++){
+            var maxDim = attempts[i][0], quality = attempts[i][1];
+            var scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+            var w = Math.max(1, Math.round(img.naturalWidth*scale));
+            var h = Math.max(1, Math.round(img.naturalHeight*scale));
+            var canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            var dataUrl = canvas.toDataURL('image/jpeg', quality);
+            best = {dataUrl:dataUrl, w:w, h:h};
+            if(dataUrl.length <= 230000) break;
+          }
+          if(!best || best.dataUrl.length > 260000){ reject(new Error('too-large')); return; }
+          resolve(best);
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // jsPDF se precarga desde cdnjs (ver <script> arriba de todo); si por lo que
+  // sea no llegó a cargar, se reintenta una vez desde jsDelivr al exportar.
+  var jsPdfFallbackPromise = null;
+  function ensureJsPdf(){
+    if(window.jspdf && window.jspdf.jsPDF) return Promise.resolve(true);
+    if(jsPdfFallbackPromise) return jsPdfFallbackPromise;
+    jsPdfFallbackPromise = new Promise(function(resolve){
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
+      s.onload = function(){ resolve(!!(window.jspdf && window.jspdf.jsPDF)); };
+      s.onerror = function(){ resolve(false); };
+      document.head.appendChild(s);
+    });
+    return jsPdfFallbackPromise;
+  }
+
+  // Mismo patrón para SheetJS (exporta el inventario a .xlsx).
+  var xlsxFallbackPromise = null;
+  function ensureXlsx(){
+    if(window.XLSX) return Promise.resolve(true);
+    if(xlsxFallbackPromise) return xlsxFallbackPromise;
+    xlsxFallbackPromise = new Promise(function(resolve){
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      s.onload = function(){ resolve(!!window.XLSX); };
+      s.onerror = function(){ resolve(false); };
+      document.head.appendChild(s);
+    });
+    return xlsxFallbackPromise;
+  }
+
+  // Descarga nativa del navegador (reemplaza al capability "downloads" de
+  // Claude Artifacts, que no existe fuera de ese entorno).
+  function downloadBlob(filename, blob){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
+  var STATUS_LABEL = { pendiente:'Pendiente', confirmada:'Confirmada', en_evento:'En evento', devuelta:'Devuelta', cancelada:'Cancelada' };
+  var STATUS_PILL = { pendiente:'pill-warn', confirmada:'pill-info', en_evento:'pill-accent', devuelta:'pill-ok', cancelada:'pill-danger' };
+  var STATUS_ORDER = ['pendiente','confirmada','en_evento','devuelta','cancelada'];
+
+  // Estado físico de cada unidad serializada (código QR individual). "en_evento"
+  // acá es una marca manual e informativa (para saber qué pieza física salió) —
+  // no reemplaza el cálculo de "afuera ahora" del dashboard, que sigue viniendo
+  // de las reservas en curso.
+  var UNIT_STATUS_LABEL = { disponible:'Disponible', en_evento:'En evento', en_revision:'En revisión', en_limpieza:'En limpieza', danado:'Dañado' };
+  var UNIT_STATUS_PILL = { disponible:'pill-ok', en_evento:'pill-accent', en_revision:'pill-info', en_limpieza:'pill-warn', danado:'pill-danger' };
+  var UNIT_STATUS_ORDER = ['disponible','en_evento','en_revision','en_limpieza','danado'];
+
+  // ---------- state ----------
+  var db = null;
+  var localMode = false;
+  var viewerName = localStorage.getItem('df_viewer_name') || '';
+  var items = [];
+  var reservations = [];
+  var depositos = [];
+  var stockRows = [];
+  var units = [];
+  var currentDepositoId = localStorage.getItem('df_deposito_filter') || 'all';
+  var DEFAULT_DEPOSITO_ID = 'deposito-martinez';
+  var activeTab = 'dashboard';
+  var resFilter = 'activas';
+  var resSearch = '';
+  var noticeDismissed = localStorage.getItem('df_seed_notice_dismissed') === '1';
+  var seedRan = false;
+
+  function itemsById(){ var m={}; items.forEach(function(i){ m[i.id]=i; }); return m; }
+  function depositosById(){ var m={}; depositos.forEach(function(d){ m[d.id]=d; }); return m; }
+  function depositoName(id){ var d = depositosById()[id]; return d ? d.name : '—'; }
+  function stockKey(itemId, depositoId){ return itemId+'__'+depositoId; }
+  function stockRowFor(itemId, depositoId){ return stockRows.find(function(s){ return s.itemId===itemId && s.depositoId===depositoId; }); }
+  function stockRowsForItem(itemId){ return stockRows.filter(function(s){ return s.itemId===itemId; }); }
+
+  // ---------- unidades (códigos QR individuales) ----------
+  function unitsForItem(itemId, depositoId){
+    return units.filter(function(u){ return u.itemId===itemId && (!depositoId || depositoId==='all' || u.depositoId===depositoId); });
+  }
+  function unitById(id){ return units.find(function(u){ return u.id===id; }); }
+  function nextUnitSeq(itemId){
+    var max = 0;
+    units.forEach(function(u){
+      if(u.itemId!==itemId) return;
+      var n = parseInt(String(u.id).split('-').pop(),10);
+      if(!isNaN(n) && n>max) max = n;
+    });
+    return max+1;
+  }
+  // Si ya se generaron códigos QR para este ítem+depósito, el estado de cada
+  // unidad manda por sobre lo cargado a mano en "Editar stock" — así no hay
+  // dos lugares para el mismo dato una vez que la categoría está serializada.
+  function oosCountsFor(itemId, depositoId, fallbackRow){
+    var us = unitsForItem(itemId, depositoId);
+    if(us.length){
+      var c = {enRevision:0, enLimpieza:0, danado:0};
+      us.forEach(function(u){
+        if(u.status==='en_revision') c.enRevision++;
+        else if(u.status==='en_limpieza') c.enLimpieza++;
+        else if(u.status==='danado') c.danado++;
+      });
+      return c;
+    }
+    return { enRevision:Number((fallbackRow||{}).enRevision)||0, enLimpieza:Number((fallbackRow||{}).enLimpieza)||0, danado:Number((fallbackRow||{}).danado)||0 };
+  }
+
+  // depositoId vacío/undefined = agregado de todos los depósitos.
+  function itemStockTotals(itemId, depositoId){
+    var rows = depositoId ? stockRowsForItem(itemId).filter(function(s){ return s.depositoId===depositoId; }) : stockRowsForItem(itemId);
+    var total=0, enRevision=0, enLimpieza=0, danado=0;
+    rows.forEach(function(s){
+      total += Number(s.total)||0;
+      var oc = oosCountsFor(itemId, s.depositoId, s);
+      enRevision += oc.enRevision;
+      enLimpieza += oc.enLimpieza;
+      danado += oc.danado;
+    });
+    return {total:total, enRevision:enRevision, enLimpieza:enLimpieza, danado:danado};
+  }
+
+  // committedQty pide el depósito explícito (se usa para chequear disponibilidad
+  // en el depósito que se está eligiendo en el formulario de reserva).
+  function committedQty(itemId, depositoId, start, end, statuses, excludeId){
+    var total = 0;
+    reservations.forEach(function(r){
+      if(r.id === excludeId) return;
+      if(statuses.indexOf(r.status) === -1) return;
+      if(depositoId && depositoId!=='all' && r.depositoId!==depositoId) return;
+      if(!overlap(r.start, r.end, start, end)) return;
+      (r.items||[]).forEach(function(row){ if(row.itemId === itemId) total += Number(row.qty)||0; });
+    });
+    return total;
+  }
+  // outNowQty/reservedQty/itemStats, en cambio, si no se les pasa depósito usan
+  // el filtro activo (currentDepositoId) — así el dashboard y el inventario
+  // reflejan el depósito seleccionado arriba.
+  function outNowQty(itemId, depositoId){
+    var dep = depositoId===undefined ? currentDepositoId : depositoId;
+    var total = 0;
+    reservations.forEach(function(r){
+      if(r.status !== 'en_evento') return;
+      if(dep && dep!=='all' && r.depositoId!==dep) return;
+      (r.items||[]).forEach(function(row){ if(row.itemId === itemId) total += Number(row.qty)||0; });
+    });
+    return total;
+  }
+  // Stock asignado a fiestas pendientes o confirmadas, sin importar cuán lejos esté la fecha:
+  // apenas se crea la reserva (aunque no esté confirmada) el stock queda apartado.
+  function reservedQty(itemId, depositoId){
+    var dep = depositoId===undefined ? currentDepositoId : depositoId;
+    var total = 0;
+    reservations.forEach(function(r){
+      if(r.status !== 'pendiente' && r.status !== 'confirmada') return;
+      if(dep && dep!=='all' && r.depositoId!==dep) return;
+      (r.items||[]).forEach(function(row){ if(row.itemId === itemId) total += Number(row.qty)||0; });
+    });
+    return total;
+  }
+  // Estados de control interno: unidades que existen pero no se pueden ofrecer
+  // (revisión técnica, limpieza pendiente o rotas). Se cargan a mano por depósito.
+  var OOS_FIELDS = ['enRevision','enLimpieza','danado'];
+  var OOS_LABEL = { enRevision:'En revisión', enLimpieza:'En limpieza', danado:'Dañado' };
+  var OOS_ICON = { enRevision:'🔍', enLimpieza:'🧼', danado:'🛠' };
+
+  function itemStats(item, depositoId){
+    var dep = depositoId===undefined ? currentDepositoId : depositoId;
+    var totals = itemStockTotals(item.id, dep==='all' ? null : dep);
+    var total = totals.total;
+    var out = outNowQty(item.id, dep);
+    var reserved = reservedQty(item.id, dep);
+    var outOfService = totals.enRevision + totals.enLimpieza + totals.danado;
+    return {
+      total: total, out: out, reserved: reserved,
+      enRevision: totals.enRevision, enLimpieza: totals.enLimpieza, danado: totals.danado, outOfService: outOfService,
+      available: Math.max(0, total - out - reserved - outOfService),
+      overbooked: (out + reserved + outOfService) > total
+    };
+  }
+
+  // ---------- seed data ----------
+  // Viene de seed-data.js (window.MOBIHUB_SEED): son los datos reales del
+  // catálogo migrados desde la versión anterior (Claude Artifact), no datos
+  // de ejemplo. Si por algún motivo ese archivo no cargó, se usa un catálogo
+  // mínimo vacío para que la app igual funcione.
+  var REAL_SEED = window.MOBIHUB_SEED || {depositos:[], items:[], stock:[], reservations:[], photos:{}};
+  function seedItems(){
+    return REAL_SEED.items.map(function(i){ return Object.assign({}, i); });
+  }
+  function seedDepositos(){
+    return REAL_SEED.depositos.map(function(d){ return Object.assign({}, d); });
+  }
+  function seedStock(){
+    return REAL_SEED.stock.map(function(s){
+      return Object.assign({id: stockKey(s.itemId, s.depositoId)}, s);
+    });
+  }
+  function seedReservations(){
+    return REAL_SEED.reservations.map(function(r){
+      return Object.assign({updatedBy:'Equipo', updatedAt:new Date().toISOString(), lastAction:'creó la reserva'}, r);
+    });
+  }
+  function seedPhotosFor(itemId){
+    return (REAL_SEED.photos && REAL_SEED.photos[itemId]) || [];
+  }
+
+  // ---------- local fallback store (no db capability) ----------
+  function useLocalFallback(){
+    localMode = true;
+    depositos = seedDepositos();
+    items = seedItems();
+    stockRows = seedStock();
+    reservations = seedReservations();
+    units = [];
+    render();
+  }
+
+  // ---------- db wiring ----------
+  async function ensureSeed(){
+    try{
+      var seedDoc = db.doc('meta/seed');
+      var snap = await seedDoc.get();
+      if(snap.exists) return;
+      var deps = seedDepositos();
+      for(var d=0; d<deps.length; d++){
+        await db.collection('depositos').doc(deps[d].id).set({ name: deps[d].name, address: deps[d].address, updatedBy:'Equipo', updatedAt:new Date().toISOString() });
+      }
+      var its = seedItems();
+      for(var i=0;i<its.length;i++){
+        var itSeed = its[i];
+        await db.collection('items').doc(itSeed.id).set(Object.assign(
+          { name: itSeed.name, unit: itSeed.unit, updatedBy:'Equipo', updatedAt:new Date().toISOString(), lastAction:'agregó la categoría' },
+          itSeed.description ? {description: itSeed.description} : {},
+          itSeed.details ? {details: itSeed.details} : {}
+        ));
+        var itPhotos = seedPhotosFor(itSeed.id);
+        for(var p=0;p<itPhotos.length;p++){
+          var ph = itPhotos[p];
+          await db.collection('items').doc(itSeed.id).collection('photos').doc(ph.id).set({
+            dataUrl: ph.dataUrl, w: ph.w, h: ph.h, order: ph.order, uploadedBy: ph.uploadedBy||'Equipo', uploadedAt: new Date().toISOString()
+          });
+        }
+      }
+      var stk = seedStock();
+      for(var k=0;k<stk.length;k++){
+        var s = stk[k];
+        await db.collection('stock').doc(s.id).set({ itemId:s.itemId, depositoId:s.depositoId, total:s.total||0, enRevision:s.enRevision||0, enLimpieza:s.enLimpieza||0, danado:s.danado||0, updatedBy:'Equipo', updatedAt:new Date().toISOString() });
+      }
+      var res = seedReservations();
+      for(var j=0;j<res.length;j++){
+        var r = res[j];
+        await db.collection('reservations').doc(r.id).set(r);
+      }
+      await seedDoc.set({ done:true, at:new Date().toISOString() });
+    }catch(e){ /* seeding is best-effort */ }
+  }
+
+  var itemsLoaded=false, reservationsLoaded=false, depositosLoaded=false, stockLoaded=false, migrationRan=false;
+
+  function subscribeItems(){
+    db.collection('items').onSnapshot(function(snap){
+      items = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); }).sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+      itemsLoaded = true;
+      render(); maybeMigrate();
+    }, function(){ /* degrade silently */ });
+  }
+  function subscribeReservations(){
+    db.collection('reservations').onSnapshot(function(snap){
+      reservations = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); }).sort(function(a,b){ return (a.start||'').localeCompare(b.start||''); });
+      reservationsLoaded = true;
+      render(); maybeMigrate();
+    }, function(){ /* degrade silently */ });
+  }
+  function subscribeDepositos(){
+    db.collection('depositos').onSnapshot(function(snap){
+      depositos = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); }).sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+      depositosLoaded = true;
+      if(currentDepositoId!=='all' && depositos.length && !depositosById()[currentDepositoId]){
+        currentDepositoId = 'all'; localStorage.setItem('df_deposito_filter','all');
+      }
+      render(); maybeMigrate();
+    }, function(){ /* degrade silently */ });
+  }
+  function subscribeStock(){
+    db.collection('stock').onSnapshot(function(snap){
+      stockRows = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      stockLoaded = true;
+      render(); maybeMigrate();
+    }, function(){ /* degrade silently */ });
+  }
+  function subscribeUnits(){
+    db.collection('units').onSnapshot(function(snap){
+      units = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      render();
+    }, function(){ /* degrade silently */ });
+  }
+
+  // Migración única (por sesión) del modelo de depósito único al de múltiples
+  // depósitos: crea el depósito por defecto si no hay ninguno cargado todavía,
+  // y mueve el total/estados que vivían en cada "item" a su fila de stock en
+  // ese depósito por defecto. Chequea existencia antes de escribir, así que es
+  // seguro que corra de nuevo si se recarga la página a mitad de camino.
+  async function maybeMigrate(){
+    if(migrationRan) return;
+    if(!itemsLoaded || !reservationsLoaded || !depositosLoaded || !stockLoaded) return;
+    migrationRan = true;
+    try{
+      if(depositos.length === 0){
+        await db.collection('depositos').doc(DEFAULT_DEPOSITO_ID).set({ name:'Depósito Martínez', address:'', updatedBy:'Equipo', updatedAt:new Date().toISOString() });
+      }
+      for(var i=0;i<items.length;i++){
+        var it = items[i];
+        if(it.total !== undefined){
+          var stockId = stockKey(it.id, DEFAULT_DEPOSITO_ID);
+          var exists = stockRows.some(function(s){ return s.id===stockId; });
+          if(!exists){
+            await db.collection('stock').doc(stockId).set({
+              itemId: it.id, depositoId: DEFAULT_DEPOSITO_ID,
+              total: Number(it.total)||0,
+              enRevision: Number(it.enRevision)||0,
+              enLimpieza: Number(it.enLimpieza)||0,
+              danado: Number(it.danado)||0,
+              updatedBy:'Equipo', updatedAt:new Date().toISOString()
+            });
+          }
+        }
+      }
+      for(var j=0;j<reservations.length;j++){
+        var r = reservations[j];
+        if(!r.depositoId){
+          await db.collection('reservations').doc(r.id).update({ depositoId: DEFAULT_DEPOSITO_ID });
+        }
+      }
+    }catch(e){ /* migración best-effort: no debe romper el arranque */ }
+  }
+
+  async function initDb(){
+    // Ver FIREBASE_CONFIG más arriba del archivo (o firebase-config.js si lo
+    // separaste). Si falta completarlo, la app arranca en modo local para
+    // que igual se pueda ver funcionando mientras se configura Firebase.
+    if(!window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey || window.FIREBASE_CONFIG.apiKey === 'PEGAR_ACA'){
+      console.warn('[Mobihub] Falta configurar Firebase (ver FIREBASE_CONFIG) — arrancando en modo local.');
+      useLocalFallback();
+      return;
+    }
+    try{
+      firebase.initializeApp(window.FIREBASE_CONFIG);
+      db = firebase.firestore();
+    }catch(e){
+      console.error('[Mobihub] No se pudo inicializar Firebase:', e);
+      useLocalFallback();
+      return;
+    }
+    try{
+      await ensureSeed();
+      subscribeDepositos();
+      subscribeItems();
+      subscribeStock();
+      subscribeReservations();
+      subscribeUnits();
+      render();
+    }catch(e){
+      console.error('[Mobihub] Error conectando con Firestore:', e);
+      useLocalFallback();
+    }
+  }
+
+  // ---------- writes ----------
+  function actorName(){ return viewerName || 'Equipo'; }
+
+  async function saveItem(id, data, isNew){
+    var body = Object.assign({}, data, { updatedBy: actorName(), updatedAt: new Date().toISOString() });
+    if(localMode){
+      if(isNew){ items.push(Object.assign({id:id}, body)); }
+      else { var idx = items.findIndex(function(i){return i.id===id;}); if(idx>-1) items[idx] = Object.assign({}, items[idx], body); }
+      render(); return;
+    }
+    // set() on create (the doc may not exist yet); update() on edit so fields
+    // this call doesn't touch (ficha, fotos, otros contadores) are preserved.
+    if(isNew){ await db.collection('items').doc(id).set(body); }
+    else { await db.collection('items').doc(id).update(body); }
+  }
+
+  async function saveDeposito(id, data, isNew){
+    var body = Object.assign({}, data, { updatedBy: actorName(), updatedAt: new Date().toISOString() });
+    if(localMode){
+      if(isNew){ depositos.push(Object.assign({id:id}, body)); }
+      else { var idx = depositos.findIndex(function(d){return d.id===id;}); if(idx>-1) depositos[idx] = Object.assign({}, depositos[idx], body); }
+      render(); return;
+    }
+    if(isNew){ await db.collection('depositos').doc(id).set(body); }
+    else { await db.collection('depositos').doc(id).update(body); }
+  }
+
+  async function saveStock(itemId, depositoId, data){
+    var stockId = stockKey(itemId, depositoId);
+    var body = Object.assign({ itemId:itemId, depositoId:depositoId }, data, { updatedBy: actorName(), updatedAt: new Date().toISOString() });
+    if(localMode){
+      var idx = stockRows.findIndex(function(s){return s.id===stockId;});
+      if(idx>-1) stockRows[idx] = Object.assign({id:stockId}, body);
+      else stockRows.push(Object.assign({id:stockId}, body));
+      render(); return;
+    }
+    await db.collection('stock').doc(stockId).set(body);
+  }
+
+  async function generateUnits(itemId, depositoId, count){
+    var seq = nextUnitSeq(itemId);
+    var newOnes = [];
+    for(var i=0;i<count;i++){ newOnes.push(itemId+'-'+padN(seq+i,3)); }
+    if(localMode){
+      newOnes.forEach(function(code){
+        units.push({ id:code, itemId:itemId, depositoId:depositoId, status:'disponible', createdBy:actorName(), createdAt:new Date().toISOString(), updatedBy:actorName(), updatedAt:new Date().toISOString() });
+      });
+      render(); return;
+    }
+    for(var j=0;j<newOnes.length;j++){
+      await db.collection('units').doc(newOnes[j]).set({
+        itemId:itemId, depositoId:depositoId, status:'disponible',
+        createdBy:actorName(), createdAt:new Date().toISOString(),
+        updatedBy:actorName(), updatedAt:new Date().toISOString()
+      });
+    }
+  }
+
+  async function setUnitStatus(unitId, status){
+    if(localMode){
+      var idx = units.findIndex(function(u){ return u.id===unitId; });
+      if(idx>-1) units[idx] = Object.assign({}, units[idx], {status:status, updatedBy:actorName(), updatedAt:new Date().toISOString()});
+      render(); return;
+    }
+    await db.collection('units').doc(unitId).update({ status:status, updatedBy:actorName(), updatedAt:new Date().toISOString() });
+  }
+
+  function photosRef(itemId){ return db.collection('items').doc(itemId).collection('photos'); }
+
+  async function addPhotoDoc(itemId, photo){
+    if(localMode){
+      var item = itemsById()[itemId];
+      if(!item) return;
+      item.photos = item.photos || [];
+      item.photos.push(Object.assign({id:uid()}, photo));
+      return;
+    }
+    await photosRef(itemId).add(photo);
+  }
+
+  async function removePhotoDoc(itemId, photoId){
+    if(localMode){
+      var item = itemsById()[itemId];
+      if(!item) return;
+      item.photos = (item.photos||[]).filter(function(p){ return p.id!==photoId; });
+      return;
+    }
+    await photosRef(itemId).doc(photoId).delete();
+  }
+
+  async function saveReservation(res){
+    var body = Object.assign({}, res, { updatedBy: actorName(), updatedAt: new Date().toISOString() });
+    if(localMode){
+      var idx = reservations.findIndex(function(r){return r.id===res.id;});
+      if(idx>-1) reservations[idx] = body; else reservations.push(body);
+      render(); return;
+    }
+    await db.collection('reservations').doc(res.id).set(body);
+  }
+
+  async function updateReservationStatus(id, status){
+    var lastAction = 'cambió el estado a "'+STATUS_LABEL[status]+'"';
+    if(localMode){
+      var idx = reservations.findIndex(function(r){return r.id===id;});
+      if(idx>-1){ reservations[idx] = Object.assign({}, reservations[idx], {status:status, updatedBy:actorName(), updatedAt:new Date().toISOString(), lastAction:lastAction}); }
+      render(); return;
+    }
+    await db.collection('reservations').doc(id).update({ status:status, updatedBy:actorName(), updatedAt:new Date().toISOString(), lastAction:lastAction });
+  }
+
+  // ---------- render root ----------
+  function render(){
+    renderWho();
+    renderNotice();
+    renderTabs();
+    if(activeTab==='dashboard') renderDashboard();
+    else if(activeTab==='inventario') renderInventario();
+    else renderReservas();
+    if(modalOnDataChange){ try{ modalOnDataChange(); }catch(e){} }
+  }
+
+  function renderWho(){
+    var el = document.getElementById('who-area');
+    var badge = localMode ? '<span class="local-badge" title="Sin conexión al guardado compartido: los cambios quedan solo en esta pestaña">Modo local</span>' : '';
+    var scanBtn = '<button type="button" class="btn btn-secondary btn-sm" id="btn-scan-code" title="Escanear código QR de una unidad">📷 Escanear</button>';
+    if(!viewerName){
+      el.innerHTML = scanBtn + badge + '<div class="who-edit">'+
+        '<input type="text" id="who-input" placeholder="Tu nombre" style="width:140px">'+
+        '<button class="btn btn-primary btn-sm" id="who-save">Entrar</button></div>';
+      document.getElementById('who-save').onclick = function(){
+        var v = document.getElementById('who-input').value.trim();
+        if(!v) return;
+        viewerName = v; localStorage.setItem('df_viewer_name', v); render();
+      };
+      document.getElementById('who-input').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('who-save').click(); });
+      document.getElementById('btn-scan-code').onclick = openScanModal;
+      return;
+    }
+    el.innerHTML = scanBtn + badge + '<div class="who-pill"><span class="dot"></span>'+esc(viewerName)+'</div><button class="link-btn" id="who-change">cambiar</button>';
+    document.getElementById('who-change').onclick = function(){ viewerName=''; render(); };
+    document.getElementById('btn-scan-code').onclick = openScanModal;
+  }
+
+  function renderNotice(){
+    var el = document.getElementById('notice-area');
+    if(noticeDismissed){ el.innerHTML=''; return; }
+    el.innerHTML = '<div class="notice"><div>Este catálogo se migró desde la versión anterior de Mobihub. Las 2 fotos de la carpa 6x6 no se migraron automáticamente — subilas de nuevo desde la ficha del producto si las necesitás.</div><button id="notice-close" title="Cerrar">×</button></div>';
+    document.getElementById('notice-close').onclick = function(){ noticeDismissed=true; localStorage.setItem('df_seed_notice_dismissed','1'); renderNotice(); };
+  }
+
+  function renderTabs(){
+    var buttons = document.querySelectorAll('#tabs button');
+    buttons.forEach(function(b){
+      b.classList.toggle('active', b.dataset.tab===activeTab);
+      b.onclick = function(){ activeTab=b.dataset.tab; render(); };
+    });
+  }
+
+  // ---------- selector de depósito (compartido por dashboard/inventario/reservas) ----------
+  function depositoBarHtml(){
+    var opts = '<option value="all">Todos los depósitos</option>' + depositos.map(function(d){
+      return '<option value="'+esc(d.id)+'"'+(d.id===currentDepositoId?' selected':'')+'>'+esc(d.name)+'</option>';
+    }).join('');
+    return '<div class="deposito-bar">'+
+      '<select id="deposito-filter">'+opts+'</select>'+
+      '<button type="button" class="btn-text" id="btn-new-deposito">+ Depósito</button>'+
+      (currentDepositoId!=='all' ? '<button type="button" class="btn-text" id="btn-rename-deposito">✎ Renombrar</button>' : '')+
+      '</div>';
+  }
+  function bindDepositoBar(){
+    var sel = document.getElementById('deposito-filter');
+    if(sel){ sel.onchange = function(){ currentDepositoId = sel.value; localStorage.setItem('df_deposito_filter', currentDepositoId); render(); }; }
+    var btnNew = document.getElementById('btn-new-deposito');
+    if(btnNew) btnNew.onclick = openNewDepositoModal;
+    var btnRename = document.getElementById('btn-rename-deposito');
+    if(btnRename) btnRename.onclick = function(){ openRenameDepositoModal(currentDepositoId); };
+  }
+  function openNewDepositoModal(){
+    openModal(
+      '<h3>Nuevo depósito</h3><p class="modal-sub">Sumá otra ubicación física de stock.</p>'+
+      '<div id="modal-error"></div>'+
+      '<div class="field"><label>Nombre</label><input id="f-dep-name" type="text" placeholder="Ej: Depósito Norte"></div>'+
+      '<div class="field"><label>Dirección</label><input id="f-dep-address" type="text" placeholder="Opcional"></div>',
+      [
+        {label:'Cancelar', cls:'btn-secondary', action: closeModal},
+        {label:'Guardar depósito', cls:'btn-primary', action: function(){
+          var name = document.getElementById('f-dep-name').value.trim();
+          var address = document.getElementById('f-dep-address').value.trim();
+          if(!name){ showModalError('Poné un nombre para el depósito.'); return; }
+          var id = slugify(name) || uid();
+          if(depositosById()[id]){ showModalError('Ya existe un depósito con ese nombre.'); return; }
+          saveDeposito(id, {name:name, address:address}, true);
+          currentDepositoId = id; localStorage.setItem('df_deposito_filter', id);
+          closeModal();
+        }}
+      ]
+    );
+  }
+  function openRenameDepositoModal(id){
+    var dep = depositosById()[id];
+    if(!dep) return;
+    openModal(
+      '<h3>Editar depósito</h3><p class="modal-sub">Nombre y dirección de este depósito.</p>'+
+      '<div id="modal-error"></div>'+
+      '<div class="field"><label>Nombre</label><input id="f-dep-name" type="text" value="'+esc(dep.name||'')+'"></div>'+
+      '<div class="field"><label>Dirección</label><input id="f-dep-address" type="text" value="'+esc(dep.address||'')+'"></div>',
+      [
+        {label:'Cancelar', cls:'btn-secondary', action: closeModal},
+        {label:'Guardar cambios', cls:'btn-primary', action: function(){
+          var name = document.getElementById('f-dep-name').value.trim();
+          var address = document.getElementById('f-dep-address').value.trim();
+          if(!name){ showModalError('Poné un nombre para el depósito.'); return; }
+          saveDeposito(id, {name:name, address:address}, false);
+          closeModal();
+        }}
+      ]
+    );
+  }
+
+  // ---------- dashboard ----------
+  function renderDashboard(){
+    var t = today();
+    var totalPieces = items.reduce(function(s,i){ return s+itemStats(i).total; },0);
+    var outNow = items.reduce(function(s,i){ return s+outNowQty(i.id); },0);
+    var reservedTotal = items.reduce(function(s,i){ return s+reservedQty(i.id); },0);
+    var upcoming7 = reservations.filter(function(r){ return r.status!=='cancelada' && r.status!=='devuelta' && r.start>=t && r.start<=addDaysStr(t,7); }).length;
+    var oosTotal = items.reduce(function(s,i){ return s+itemStats(i).outOfService; },0);
+    var alerts = items.filter(function(i){ return itemStats(i).overbooked; }).length;
+
+    var upcomingList = reservations.filter(function(r){ return r.status!=='cancelada' && r.status!=='devuelta'; })
+      .sort(function(a,b){ return a.start.localeCompare(b.start); }).slice(0,5);
+
+    var html = '';
+    html += '<section>'+depositoBarHtml()+'</section>';
+    html += '<section><div class="kpi-grid">'+
+      kpiTile('Piezas en catálogo', totalPieces.toLocaleString('es-AR'), items.length+' categorías')+
+      kpiTile('Reservado', reservedTotal.toLocaleString('es-AR'), 'asignado a fiestas sin confirmar o confirmadas')+
+      kpiTile('Afuera ahora', outNow.toLocaleString('es-AR'), 'en eventos en curso')+
+      kpiTile('Reservas próx. 7 días', String(upcoming7), 'para preparar logística')+
+      kpiTile('Fuera de servicio', oosTotal.toLocaleString('es-AR'), 'en revisión, limpieza o dañado')+
+      kpiTile('Alertas de stock', String(alerts), alerts ? 'categorías sobrecomprometidas' : 'todo cubierto', alerts>0)+
+      '</div></section>';
+
+    html += '<section><h2>Stock por categoría</h2><div class="table-wrap"><table><thead><tr>'+
+      '<th>Categoría</th><th class="num">Total</th><th class="num">Reservado</th><th class="num">Afuera</th><th class="num">Fuera de servicio</th><th>Uso</th><th class="num">Disponible</th>'+
+      '</tr></thead><tbody>';
+    items.forEach(function(i){
+      var st = itemStats(i);
+      var outPct = st.total ? Math.min(100, Math.round(st.out/st.total*100)) : 0;
+      var reservedPct = st.total ? Math.min(100-outPct, Math.round(st.reserved/st.total*100)) : 0;
+      var oosPct = st.total ? Math.max(0, Math.min(100-outPct-reservedPct, Math.round(st.outOfService/st.total*100))) : 0;
+      html += '<tr><td class="item-name">'+esc(i.name)+'</td>'+
+        '<td class="num mono">'+st.total+'</td>'+
+        '<td class="num mono">'+st.reserved+'</td>'+
+        '<td class="num mono">'+st.out+'</td>'+
+        '<td class="num mono">'+st.outOfService+'</td>'+
+        '<td><div class="stockbar"><span class="seg-out" style="width:'+outPct+'%"></span><span class="seg-committed" style="width:'+reservedPct+'%"></span><span class="seg-oos" style="width:'+oosPct+'%"></span></div></td>'+
+        '<td class="num mono">'+st.available+(st.overbooked?' <span class="pill pill-warn" style="margin-left:6px;">⚠</span>':'')+'</td></tr>';
+    });
+    if(!items.length) html += '<tr><td colspan="7" class="muted" style="padding:20px;">Todavía no cargaste categorías.</td></tr>';
+    html += '</tbody></table></div></section>';
+
+    html += '<section><h2>Próximos retiros y eventos</h2>';
+    if(!upcomingList.length){ html += '<div class="empty-state">No hay reservas activas próximas.</div>'; }
+    else{ html += '<div class="res-list">'+ upcomingList.map(renderResCard).join('') + '</div>'; }
+    html += '</section>';
+
+    document.getElementById('view').innerHTML = html;
+    bindDepositoBar();
+    bindResCardActions();
+  }
+
+  function kpiTile(label, value, sub, alert){
+    return '<div class="kpi'+(alert?' alert':'')+'"><div class="label">'+esc(label)+'</div><div class="value mono">'+esc(value)+'</div><div class="sub">'+esc(sub)+'</div></div>';
+  }
+
+  function oosBreakdown(st){
+    var parts = OOS_FIELDS.filter(function(f){ return st[f] > 0; }).map(function(f){ return OOS_ICON[f]+' '+st[f]; });
+    return parts.length ? '<div class="oos-breakdown">'+parts.join(' · ')+'</div>' : '';
+  }
+
+  // ---------- inventario ----------
+  function renderInventario(){
+    var html = '<section><div class="section-head"><h2>Inventario</h2>'+
+      '<div style="display:flex; gap:8px; flex-wrap:wrap;">'+
+      '<button class="btn btn-secondary" id="btn-export-inventory">📊 Exportar Excel</button>'+
+      '<button class="btn btn-primary" id="btn-new-item">+ Nueva categoría</button>'+
+      '</div></div>'+
+      depositoBarHtml()+
+      '</section>';
+    html += '<section><div class="table-wrap"><table><thead><tr>'+
+      '<th>Categoría</th><th class="num">Total</th><th class="num">Reservado</th><th class="num">Afuera ahora</th><th class="num">Fuera de servicio</th><th class="num">Disponible</th><th></th>'+
+      '</tr></thead><tbody>';
+    items.forEach(function(i){
+      var st = itemStats(i);
+      html += '<tr data-item="'+esc(i.id)+'">'+
+        '<td><div class="item-name">'+esc(i.name)+'</div><div class="item-unit">'+esc(i.unit||'unidades')+'</div></td>'+
+        '<td class="num mono" data-cell="total">'+st.total+'</td>'+
+        '<td class="num mono">'+st.reserved+(st.overbooked?' <span class="pill pill-warn">⚠ sobrecomprometido</span>':'')+'</td>'+
+        '<td class="num mono">'+st.out+'</td>'+
+        '<td class="num mono">'+st.outOfService+oosBreakdown(st)+'</td>'+
+        '<td class="num mono">'+st.available+'</td>'+
+        '<td class="num" style="white-space:nowrap;">'+
+          '<button class="icon-btn ficha-open" data-id="'+esc(i.id)+'" title="Ficha de producto">📋</button> '+
+          '<button class="icon-btn units-open" data-id="'+esc(i.id)+'" title="Códigos QR por unidad">🏷️</button> '+
+          '<button class="icon-btn edit-total" data-id="'+esc(i.id)+'" title="Editar stock y estados">✎</button>'+
+        '</td>'+
+        '</tr>';
+    });
+    if(!items.length) html += '<tr><td colspan="7" class="muted" style="padding:20px;">Todavía no hay categorías cargadas.</td></tr>';
+    html += '</tbody></table></div></section>';
+    document.getElementById('view').innerHTML = html;
+
+    bindDepositoBar();
+    document.getElementById('btn-new-item').onclick = openNewItemModal;
+    document.getElementById('btn-export-inventory').onclick = function(){ exportInventoryExcel(document.getElementById('btn-export-inventory')); };
+    document.querySelectorAll('.edit-total').forEach(function(btn){
+      btn.onclick = function(){ openEditTotalModal(btn.dataset.id); };
+    });
+    document.querySelectorAll('.ficha-open').forEach(function(btn){
+      btn.onclick = function(){ openFichaModal(btn.dataset.id); };
+    });
+    document.querySelectorAll('.units-open').forEach(function(btn){
+      btn.onclick = function(){ openUnitsModal(btn.dataset.id); };
+    });
+  }
+
+  function openNewItemModal(){
+    openModal(
+      '<h3>Nueva categoría</h3><p class="modal-sub">Sumá un tipo de mobiliario al catálogo. El stock por depósito se carga después, desde "Editar stock".</p>'+
+      '<div id="modal-error"></div>'+
+      '<div class="field"><label>Nombre</label><input id="f-name" type="text" placeholder="Ej: Silla Napoleón blanca"></div>'+
+      '<div class="field"><label>Unidad</label><input id="f-unit" type="text" placeholder="unidades" value="unidades"></div>',
+      [
+        {label:'Cancelar', cls:'btn-secondary', action: closeModal},
+        {label:'Guardar categoría', cls:'btn-primary', action: function(){
+          var name = document.getElementById('f-name').value.trim();
+          var unit = document.getElementById('f-unit').value.trim() || 'unidades';
+          if(!name){ showModalError('Poné un nombre para la categoría.'); return; }
+          var id = slugify(name) || uid();
+          saveItem(id, {name:name, unit:unit, lastAction:'agregó la categoría'}, true);
+          closeModal();
+        }}
+      ]
+    );
+  }
+
+  function openEditTotalModal(id){
+    var item = itemsById()[id];
+    if(!item) return;
+    if(!depositos.length){
+      openModal('<h3>Editar stock — '+esc(item.name)+'</h3><p class="modal-sub">Todavía no hay depósitos cargados. Creá uno primero con "+ Depósito".</p>', [{label:'Cerrar', cls:'btn-secondary', action: closeModal}]);
+      return;
+    }
+    function rowsHtml(){
+      return depositos.map(function(d){
+        var row = stockRowFor(id, d.id) || {};
+        var oc = oosCountsFor(id, d.id, row);
+        var managed = unitsForItem(id, d.id).length > 0;
+        var ro = managed ? ' disabled title="Se calcula solo, según el estado de cada código QR (ver 🏷️ Códigos)"' : '';
+        return '<tr data-dep="'+esc(d.id)+'">'+
+          '<td>'+esc(d.name)+(managed?' <span class="ficha-tag">🏷️ QR</span>':'')+'</td>'+
+          '<td class="num"><input type="number" min="0" step="1" data-field="total" value="'+(row.total||0)+'" style="width:72px;"></td>'+
+          '<td class="num"><input type="number" min="0" step="1" data-field="enRevision" value="'+oc.enRevision+'" style="width:60px;"'+ro+'></td>'+
+          '<td class="num"><input type="number" min="0" step="1" data-field="enLimpieza" value="'+oc.enLimpieza+'" style="width:60px;"'+ro+'></td>'+
+          '<td class="num"><input type="number" min="0" step="1" data-field="danado" value="'+oc.danado+'" style="width:60px;"'+ro+'></td>'+
+          '</tr>';
+      }).join('');
+    }
+    openModal(
+      '<h3>Editar stock — '+esc(item.name)+'</h3><p class="modal-sub">Cantidad total por depósito y qué parte no está disponible para reservar. Los depósitos marcados 🏷️ QR calculan revisión/limpieza/dañado solos, según el estado de cada código.</p>'+
+      '<div id="modal-error"></div>'+
+      '<div class="table-wrap"><table><thead><tr><th>Depósito</th><th class="num">Total</th><th class="num">🔍 Revisión</th><th class="num">🧼 Limpieza</th><th class="num">🛠 Dañado</th></tr></thead>'+
+      '<tbody id="stock-rows">'+rowsHtml()+'</tbody></table></div>',
+      [
+        {label:'Cancelar', cls:'btn-secondary', action: closeModal},
+        {label:'Guardar', cls:'btn-primary', action: function(){
+          var trs = document.querySelectorAll('#stock-rows tr');
+          var updates = [];
+          for(var t=0;t<trs.length;t++){
+            var tr = trs[t];
+            var depId = tr.getAttribute('data-dep');
+            var total = parseInt(tr.querySelector('[data-field="total"]').value,10);
+            var enRevision = parseInt(tr.querySelector('[data-field="enRevision"]').value,10);
+            var enLimpieza = parseInt(tr.querySelector('[data-field="enLimpieza"]').value,10);
+            var danado = parseInt(tr.querySelector('[data-field="danado"]').value,10);
+            if([total,enRevision,enLimpieza,danado].some(function(v){ return isNaN(v) || v<0; })){
+              showModalError('Revisá las cantidades — no pueden estar vacías ni ser negativas.');
+              return;
+            }
+            updates.push({depId:depId, total:total, enRevision:enRevision, enLimpieza:enLimpieza, danado:danado});
+          }
+          updates.forEach(function(u){
+            saveStock(id, u.depId, {total:u.total, enRevision:u.enRevision, enLimpieza:u.enLimpieza, danado:u.danado});
+          });
+          saveItem(id, {lastAction:'actualizó el stock'}, false);
+          closeModal();
+        }}
+      ],
+      {wide:true}
+    );
+  }
+
+  // ---------- unidades / códigos QR ----------
+  function openUnitsModal(itemId){
+    var item = itemsById()[itemId];
+    if(!item) return;
+
+    function depSectionHtml(d){
+      var stockRow = stockRowFor(itemId, d.id) || {};
+      var total = Number(stockRow.total)||0;
+      var us = unitsForItem(itemId, d.id).slice().sort(function(a,b){ return a.id.localeCompare(b.id); });
+      var missing = Math.max(0, total - us.length);
+      var tiles = us.map(function(u){
+        var opts = UNIT_STATUS_ORDER.map(function(s){ return '<option value="'+s+'"'+(s===u.status?' selected':'')+'>'+UNIT_STATUS_LABEL[s]+'</option>'; }).join('');
+        return '<div class="unit-tile">'+
+          '<div class="qr-box" id="qr-'+esc(u.id)+'" style="width:72px; height:72px; margin:0 auto 6px;"></div>'+
+          '<div class="unit-code mono">'+esc(u.id)+'</div>'+
+          '<select class="unit-status" data-unit="'+esc(u.id)+'">'+opts+'</select>'+
+          '</div>';
+      }).join('');
+      return '<div class="dep-block" data-dep-block="'+esc(d.id)+'">'+
+        '<div class="dep-block-head"><h4>'+esc(d.name)+'</h4>'+
+        '<span class="muted" style="font-size:.8rem;">Stock total: '+total+' · Códigos generados: '+us.length+'</span>'+
+        (missing>0 ? '<button type="button" class="btn btn-secondary btn-sm gen-units" data-dep="'+esc(d.id)+'" data-missing="'+missing+'">+ Generar '+missing+' código'+(missing===1?'':'s')+' faltante'+(missing===1?'':'s')+'</button>' : '')+
+        '</div>'+
+        (us.length ? '<div class="unit-grid">'+tiles+'</div>' : '<div class="unit-empty">Todavía no hay códigos generados para este depósito.'+(total===0?' Cargá primero el stock total desde "Editar stock".':'')+'</div>')+
+        '</div>';
+    }
+
+    function bodyHtml(){
+      if(!depositos.length){
+        return '<h3>Códigos QR — '+esc(item.name)+'</h3><p class="modal-sub">Todavía no hay depósitos cargados. Creá uno primero con "+ Depósito".</p>';
+      }
+      return '<h3>Códigos QR — '+esc(item.name)+'</h3>'+
+        '<p class="modal-sub">Un código QR chico por unidad física, para pegar en la pieza (jarrón, gazebo, etc.) y escanear para cambiar su estado.</p>'+
+        '<div id="modal-error"></div>'+
+        depositos.map(depSectionHtml).join('');
+    }
+
+    function renderQrCanvases(){
+      if(!window.QRCode) return;
+      unitsForItem(itemId).forEach(function(u){
+        var box = document.getElementById('qr-'+u.id);
+        if(box) new QRCode(box, { text:u.id, width:72, height:72, correctLevel:QRCode.CorrectLevel.H });
+      });
+    }
+
+    function bindBody(){
+      document.querySelectorAll('.gen-units').forEach(function(btn){
+        btn.onclick = function(){
+          btn.disabled = true; btn.textContent = 'Generando…';
+          generateUnits(itemId, btn.dataset.dep, parseInt(btn.dataset.missing,10)).then(renderModal).catch(function(){
+            showModalError('No se pudieron generar los códigos. Probá de nuevo.');
+            btn.disabled = false;
+          });
+        };
+      });
+      document.querySelectorAll('.unit-status').forEach(function(sel){
+        sel.onchange = function(){
+          sel.disabled = true;
+          setUnitStatus(sel.dataset.unit, sel.value).then(function(){ showToast('Código '+sel.dataset.unit+' → '+UNIT_STATUS_LABEL[sel.value]); }).finally(function(){ sel.disabled = false; });
+        };
+      });
+    }
+
+    function renderModal(){
+      var buttons = depositos.length ? [
+        {label:'Cerrar', cls:'btn-secondary', action: closeModal},
+        {label:'🖨️ Imprimir etiquetas', cls:'btn-primary', action: function(){ printUnitsLabels(itemId); }}
+      ] : [
+        {label:'Cerrar', cls:'btn-secondary', action: closeModal}
+      ];
+      openModal(bodyHtml(), buttons, {wide:true, onDataChange: renderModal});
+      bindBody();
+      renderQrCanvases();
+    }
+
+    renderModal();
+  }
+
+  function qrDataUrlFor(text, size){
+    var holder = document.createElement('div');
+    holder.style.cssText = 'position:absolute; left:-9999px; top:-9999px;';
+    document.body.appendChild(holder);
+    new QRCode(holder, { text:text, width:size, height:size, correctLevel:QRCode.CorrectLevel.H });
+    var canvas = holder.querySelector('canvas');
+    var dataUrl = canvas ? canvas.toDataURL('image/png') : (holder.querySelector('img')||{}).src;
+    document.body.removeChild(holder);
+    return dataUrl;
+  }
+
+  async function printUnitsLabels(itemId){
+    var item = itemsById()[itemId];
+    var us = unitsForItem(itemId).slice().sort(function(a,b){ return a.id.localeCompare(b.id); });
+    if(!us.length){ showToast('Todavía no hay códigos generados para imprimir.', true); return; }
+    if(!window.QRCode){ showToast('No se pudo cargar el generador de QR. Probá de nuevo.', true); return; }
+    var tiles = [];
+    for(var i=0;i<us.length;i++){
+      var dataUrl = qrDataUrlFor(us[i].id, 180);
+      tiles.push('<div class="label"><img src="'+dataUrl+'" alt=""><div class="label-name">'+esc(item?item.name:'')+'</div><div class="label-code">'+esc(us[i].id)+'</div></div>');
+    }
+    var win = window.open('', '_blank');
+    if(!win){ showToast('El navegador bloqueó la ventana de impresión — permitila e intentá de nuevo.', true); return; }
+    win.document.write(
+      '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Etiquetas — '+esc(item?item.name:'')+'</title><style>'+
+      'body{font-family:Arial,sans-serif; margin:10mm;}'+
+      '.sheet{display:flex; flex-wrap:wrap; gap:4mm;}'+
+      '.label{width:26mm; padding:2mm; border:1px dashed #999; text-align:center; page-break-inside:avoid;}'+
+      '.label img{width:100%; height:auto; display:block;}'+
+      '.label-name{font-size:2.2mm; line-height:1.2; margin-top:1mm; max-height:5mm; overflow:hidden;}'+
+      '.label-code{font-size:2mm; font-family:monospace; color:#555; margin-top:.5mm;}'+
+      '@media print{ body{margin:5mm;} }'+
+      '</style></head><body><div class="sheet">'+tiles.join('')+'</div>'+
+      '<script>window.onload=function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>'+
+      '</body></html>'
+    );
+    win.document.close();
+  }
+
+  // ---------- escaneo ----------
+  var scanHtml5QrCode = null;
+  var scanLocked = false;
+
+  function openScanModal(){
+    scanLocked = false;
+    var body = '<h3>Escanear código</h3><p class="modal-sub">Apuntá la cámara al QR de la etiqueta. También podés tipearlo a mano.</p>'+
+      '<div id="scan-error"></div>'+
+      '<div id="qr-reader"></div>'+
+      '<div class="field" style="margin-top:14px;"><label>Código a mano</label>'+
+      '<div style="display:flex; gap:8px;"><input id="manual-code" type="text" placeholder="ej: carpa-6x6-001" style="flex:1;">'+
+      '<button type="button" class="btn btn-secondary btn-sm" id="manual-code-go">Buscar</button></div></div>'+
+      '<div id="scan-result"></div>';
+
+    openModal(body, [
+      {label:'Cerrar', cls:'btn-secondary', action: closeModal}
+    ], { onClose: stopScanner });
+
+    document.getElementById('manual-code-go').onclick = function(){
+      var v = document.getElementById('manual-code').value.trim();
+      if(v) handleScanCode(v);
+    };
+    document.getElementById('manual-code').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('manual-code-go').click(); });
+
+    if(!window.Html5Qrcode){
+      document.getElementById('scan-error').innerHTML = '<div class="form-error">No se pudo cargar el lector de cámara — usá el campo de código a mano.</div>';
+      return;
+    }
+    try{
+      scanHtml5QrCode = new Html5Qrcode('qr-reader');
+      scanHtml5QrCode.start(
+        { facingMode:'environment' },
+        { fps:10, qrbox:220 },
+        function(decodedText){ handleScanCode(decodedText.trim()); },
+        function(){ /* frame sin código, normal, se ignora */ }
+      ).catch(function(){
+        var el = document.getElementById('scan-error');
+        if(el) el.innerHTML = '<div class="form-error">No se pudo abrir la cámara (revisá permisos del navegador) — usá el campo de código a mano.</div>';
+      });
+    }catch(e){
+      var el = document.getElementById('scan-error');
+      if(el) el.innerHTML = '<div class="form-error">No se pudo iniciar el lector de cámara — usá el campo de código a mano.</div>';
+    }
+  }
+
+  function stopScanner(){
+    if(scanHtml5QrCode){
+      try{ scanHtml5QrCode.stop().then(function(){ scanHtml5QrCode.clear(); }).catch(function(){}); }catch(e){}
+      scanHtml5QrCode = null;
+    }
+  }
+
+  function handleScanCode(code){
+    if(scanLocked) return;
+    scanLocked = true;
+    var panel = document.getElementById('scan-result');
+    if(!panel) { scanLocked = false; return; }
+    var u = unitById(code);
+    if(!u){
+      panel.innerHTML = '<div class="form-error">Código no reconocido: '+esc(code)+'</div>';
+      setTimeout(function(){ if(panel) panel.innerHTML=''; scanLocked = false; }, 1800);
+      return;
+    }
+    var it = itemsById()[u.itemId];
+    panel.innerHTML = '<div class="scan-card">'+
+      '<div class="res-title">'+esc(it?it.name:u.itemId)+'</div>'+
+      '<div class="muted mono" style="font-size:.8rem;">'+esc(u.id)+' · '+esc(depositoName(u.depositoId))+'</div>'+
+      '<div class="chip-row" style="margin-top:8px;">'+UNIT_STATUS_ORDER.map(function(s){
+        return '<button type="button" class="btn btn-sm '+(s===u.status?'btn-primary':'btn-secondary')+' scan-status-btn" data-status="'+s+'">'+UNIT_STATUS_LABEL[s]+'</button>';
+      }).join(' ')+'</div></div>';
+    panel.querySelectorAll('.scan-status-btn').forEach(function(btn){
+      btn.onclick = function(){
+        panel.querySelectorAll('.scan-status-btn').forEach(function(b){ b.disabled = true; });
+        setUnitStatus(u.id, btn.dataset.status).then(function(){
+          showToast('"'+u.id+'" → '+UNIT_STATUS_LABEL[btn.dataset.status]);
+          var mc = document.getElementById('manual-code'); if(mc) mc.value = '';
+          panel.innerHTML = '';
+          scanLocked = false;
+        }).catch(function(){
+          showToast('No se pudo actualizar el código. Probá de nuevo.', true);
+          scanLocked = false;
+        });
+      };
+    });
+  }
+
+  // ---------- ficha de producto ----------
+  function openFichaModal(id){
+    var item = itemsById()[id];
+    if(!item) return;
+    var photos = [];
+    var uploadingCount = 0;
+    var unsub = null;
+
+    function photoGridHtml(){
+      var tiles = photos.map(function(p){
+        return '<div class="photo-tile"><img src="'+p.dataUrl+'" alt="Foto de '+esc(item.name)+'">'+
+          '<button type="button" class="photo-remove" data-photo="'+esc(p.id)+'" title="Quitar foto">×</button></div>';
+      }).join('');
+      var uploadingTiles = '';
+      for(var u=0;u<uploadingCount;u++){ uploadingTiles += '<div class="photo-tile uploading">Subiendo…</div>'; }
+      var addTile = '<label class="photo-add"><span class="plus">+</span><span>Agregar foto</span>'+
+        '<input type="file" id="f-photo-input" accept="image/*" multiple></label>';
+      return tiles + uploadingTiles + addTile;
+    }
+
+    function refreshWarnNote(){
+      var el = document.getElementById('photo-warn');
+      if(!el) return;
+      if(photos.length < 3){
+        el.style.display = '';
+        el.textContent = 'Recomendado: subí al menos 3 fotos para que la ficha se vea completa. Llevás '+photos.length+'.';
+      } else {
+        el.style.display = 'none';
+      }
+    }
+
+    function bindPhotoGrid(){
+      var grid = document.getElementById('photo-grid');
+      if(!grid) return;
+      grid.innerHTML = photoGridHtml();
+      var input = document.getElementById('f-photo-input');
+      if(input){
+        input.onchange = function(e){
+          var files = Array.prototype.slice.call(e.target.files||[]);
+          input.value = '';
+          handleFiles(files);
+        };
+      }
+      grid.querySelectorAll('.photo-remove').forEach(function(btn){
+        btn.onclick = function(){
+          btn.disabled = true;
+          removePhotoDoc(id, btn.dataset.photo).then(function(){
+            if(localMode){ photos = (itemsById()[id].photos)||[]; bindPhotoGrid(); refreshWarnNote(); }
+          }).catch(function(){
+            showFichaError('No se pudo quitar la foto. Probá de nuevo.');
+            btn.disabled = false;
+          });
+        };
+      });
+    }
+
+    function showFichaError(msg){
+      var el = document.getElementById('ficha-error');
+      if(el) el.innerHTML = '<div class="form-error">'+esc(msg)+'</div>';
+    }
+
+    async function handleFiles(fileList){
+      var files = Array.prototype.slice.call(fileList||[]);
+      if(!files.length) return;
+      for(var i=0;i<files.length;i++){
+        uploadingCount++; bindPhotoGrid();
+        try{
+          var res = await fileToCompressedDataUrl(files[i]);
+          await addPhotoDoc(id, { dataUrl:res.dataUrl, w:res.w, h:res.h, order:photos.length, uploadedBy:actorName(), uploadedAt:new Date().toISOString() });
+          if(localMode){ photos = (itemsById()[id].photos)||[]; }
+        }catch(e){
+          var msg = 'No se pudo procesar esa foto. Probá con otro archivo.';
+          if(e && e.message==='too-large') msg = 'Esa foto pesa demasiado incluso comprimida — probá con otra.';
+          else if(e && e.message==='not-image') msg = 'Ese archivo no parece una imagen (probá JPG, PNG, WebP o GIF).';
+          else if(e && e.message==='decode-failed') msg = 'No se pudo abrir esa imagen — probá exportarla como JPG o PNG primero.';
+          else if(e && e.message==='read-failed') msg = 'No se pudo leer el archivo. Probá de nuevo.';
+          else if(e && e.code==='quota_exceeded') msg = 'Se alcanzó el límite de almacenamiento compartido del depósito.';
+          else if(e && e.code==='invalid_argument') msg = 'El depósito compartido rechazó la foto (puede ser muy pesada). Probá con otra.';
+          showFichaError(msg);
+        } finally {
+          uploadingCount--; bindPhotoGrid(); refreshWarnNote();
+        }
+      }
+    }
+
+    async function exportFicha(){
+      var btn = this;
+      var original = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Generando…';
+      try{
+        var pdfReady = await ensureJsPdf();
+        if(!pdfReady) throw {code:'lib'};
+        var current = itemsById()[id] || item;
+        var description = document.getElementById('f-desc') ? document.getElementById('f-desc').value.trim() : (current.description||'');
+        var details = document.getElementById('f-details') ? document.getElementById('f-details').value.trim() : (current.details||'');
+        var pdfDoc = buildFichaPdf(Object.assign({}, current, {description:description, details:details}), photos);
+        var blob = pdfDoc.output('blob');
+        saveItem(id, {description:description, details:details, lastAction:'exportó la ficha en PDF'}, false);
+        downloadBlob(slugify(current.name)+'-ficha-mobihub.pdf', blob);
+      }catch(err){
+        if(err && err.code==='declined'){ /* el usuario canceló, nada que avisar */ }
+        else if(err && err.code==='lib'){ showFichaError('No se pudo cargar el generador de PDF (revisá tu conexión) — probá de nuevo.'); }
+        else if(err && err.code==='no-downloads'){ showFichaError('La descarga de archivos no está disponible en esta vista.'); }
+        else { showFichaError('No se pudo generar el PDF. Probá de nuevo.'); }
+      } finally {
+        btn.disabled = false; btn.textContent = original;
+      }
+    }
+
+    var body =
+      '<h3>Ficha de producto — '+esc(item.name)+'</h3>'+
+      '<span class="ficha-tag">'+esc(item.unit||'unidades')+' · '+itemStockTotals(item.id).total+' en total</span>'+
+      '<div id="ficha-error" style="margin-top:12px;"></div>'+
+      '<div class="field" style="margin-top:10px;"><label>Descripción</label>'+
+        '<textarea id="f-desc" placeholder="Una línea que lo venda: estilo, para qué eventos, qué lo hace especial…">'+esc(item.description||'')+'</textarea></div>'+
+      '<div class="field"><label>Detalles (medidas, material, color, precio de referencia…)</label>'+
+        '<textarea id="f-details" placeholder="Ej: 45x45x90cm · resina blanca · hasta 120kg · $X por unidad / evento">'+esc(item.details||'')+'</textarea></div>'+
+      '<div class="field-section-label">Fotos</div>'+
+      '<div class="form-note" id="photo-warn" style="display:none;"></div>'+
+      '<div class="photo-grid" id="photo-grid"></div>';
+
+    openModal(body, [
+      {label:'Cerrar', cls:'btn-secondary', action: closeModal},
+      {label:'Guardar cambios', cls:'btn-secondary', action: function(){
+        var description = document.getElementById('f-desc').value.trim();
+        var details = document.getElementById('f-details').value.trim();
+        saveItem(id, {description:description, details:details, lastAction:'actualizó la ficha de producto'}, false);
+        closeModal();
+      }},
+      {label:'📄 Exportar PDF', cls:'btn-primary', action: exportFicha}
+    ], {
+      wide: true,
+      onClose: function(){ if(unsub) unsub(); }
+    });
+
+    bindPhotoGrid();
+    refreshWarnNote();
+
+    if(localMode){
+      photos = item.photos || [];
+      bindPhotoGrid(); refreshWarnNote();
+      unsub = function(){};
+    } else {
+      unsub = photosRef(id).orderBy('order').onSnapshot(function(snap){
+        photos = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+        bindPhotoGrid(); refreshWarnNote();
+      }, function(e){
+        showFichaError('No se pudo sincronizar las fotos con el depósito compartido ('+(e&&e.code?e.code:'error')+'). Cerrá y volvé a abrir la ficha.');
+      });
+    }
+  }
+
+  function buildFichaPdf(item, photos){
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit:'mm', format:'a4' });
+    var pageW = doc.internal.pageSize.getWidth();
+    var pageH = doc.internal.pageSize.getHeight();
+    var margin = 16;
+    var contentW = pageW - margin*2;
+    var INK=[27,36,47], MUTED=[91,102,114], ACCENT=[30,110,119], BORDER=[220,226,231];
+
+    function header(){
+      doc.setFillColor(ACCENT[0],ACCENT[1],ACCENT[2]);
+      doc.rect(0,0,pageW,26,'F');
+      doc.setTextColor(255,255,255);
+      doc.setFont('helvetica','bold'); doc.setFontSize(16);
+      doc.text('MOBIHUB', margin, 15);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text('Mobiliario para eventos', margin, 21);
+    }
+    function footer(){
+      doc.setDrawColor(BORDER[0],BORDER[1],BORDER[2]); doc.setLineWidth(0.3);
+      doc.line(margin, pageH-14, pageW-margin, pageH-14);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(MUTED[0],MUTED[1],MUTED[2]);
+      doc.text('Mobihub · Ficha de producto', margin, pageH-9);
+      doc.text(new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}), pageW-margin, pageH-9, {align:'right'});
+    }
+
+    header(); footer();
+    var y = 38;
+    doc.setTextColor(INK[0],INK[1],INK[2]); doc.setFont('helvetica','bold'); doc.setFontSize(19);
+    var nameLines = doc.splitTextToSize(item.name||'', contentW);
+    doc.text(nameLines, margin, y);
+    y += nameLines.length*7.2 + 2;
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(MUTED[0],MUTED[1],MUTED[2]);
+    doc.text(item.unit||'unidades', margin, y);
+    y += 8;
+
+    if(item.description){
+      doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(INK[0],INK[1],INK[2]);
+      var descLines = doc.splitTextToSize(item.description, contentW);
+      doc.text(descLines, margin, y);
+      y += descLines.length*5.4 + 6;
+    }
+    if(item.details){
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(INK[0],INK[1],INK[2]);
+      doc.text('Detalles', margin, y); y += 5.5;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(MUTED[0],MUTED[1],MUTED[2]);
+      var detailLines = doc.splitTextToSize(item.details, contentW);
+      doc.text(detailLines, margin, y);
+      y += detailLines.length*5 + 8;
+    }
+
+    if(photos && photos.length){
+      var cols = 2, gap = 6;
+      var tileW = (contentW - gap*(cols-1)) / cols;
+      var tileH = tileW * 0.72;
+      if(y + 6 + tileH > pageH - 20){ doc.addPage(); header(); footer(); y = 34; }
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(INK[0],INK[1],INK[2]);
+      doc.text('Fotos', margin, y); y += 6;
+
+      for(var i=0;i<photos.length;i++){
+        var col = i % cols;
+        if(col===0 && i>0){ y += tileH + gap; }
+        if(y + tileH > pageH - 20){
+          doc.addPage(); header(); footer(); y = 34;
+          doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(INK[0],INK[1],INK[2]);
+          doc.text('Fotos (continuación)', margin, y); y += 6;
+        }
+        var px = margin + col*(tileW+gap);
+        var p = photos[i];
+        var iw = p.w||tileW, ih = p.h||tileH;
+        var scale = Math.min(tileW/iw, tileH/ih);
+        var dw = iw*scale, dh = ih*scale;
+        var dx = px + (tileW-dw)/2, dy = y + (tileH-dh)/2;
+        doc.setDrawColor(BORDER[0],BORDER[1],BORDER[2]);
+        doc.roundedRect(px, y, tileW, tileH, 2, 2, 'S');
+        try{ doc.addImage(p.dataUrl, 'JPEG', dx, dy, dw, dh); }catch(e){ /* se omite una imagen rota */ }
+      }
+    }
+    return doc;
+  }
+
+  // ---------- toasts (avisos fuera de un modal) ----------
+  function ensureToastWrap(){
+    var wrap = document.getElementById('toast-wrap');
+    if(!wrap){ wrap = document.createElement('div'); wrap.id = 'toast-wrap'; wrap.className = 'toast-wrap'; document.body.appendChild(wrap); }
+    return wrap;
+  }
+  function showToast(msg, isError){
+    var wrap = ensureToastWrap();
+    var el = document.createElement('div');
+    el.className = 'toast'+(isError?' error':'');
+    el.textContent = msg;
+    wrap.appendChild(el);
+    requestAnimationFrame(function(){ el.classList.add('show'); });
+    setTimeout(function(){
+      el.classList.remove('show');
+      setTimeout(function(){ el.remove(); }, 200);
+    }, 4200);
+  }
+
+  // ---------- remito ----------
+  async function exportRemito(resId, btn){
+    var original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Generando…';
+    try{
+      var res = reservations.find(function(r){ return r.id===resId; });
+      if(!res) throw {code:'not-found'};
+      var pdfReady = await ensureJsPdf();
+      if(!pdfReady) throw {code:'lib'};
+      var pdfDoc = buildRemitoPdf(res, itemsById());
+      var blob = pdfDoc.output('blob');
+      downloadBlob('remito-'+slugify(res.event||res.id)+'.pdf', blob);
+    }catch(err){
+      if(err && err.code==='declined'){ /* el usuario canceló, nada que avisar */ }
+      else if(err && err.code==='lib'){ showToast('No se pudo cargar el generador de PDF. Probá de nuevo.', true); }
+      else if(err && err.code==='no-downloads'){ showToast('La descarga de archivos no está disponible en esta vista.', true); }
+      else if(err && err.code==='not-found'){ showToast('No se encontró la reserva.', true); }
+      else { showToast('No se pudo generar el remito. Probá de nuevo.', true); }
+    } finally {
+      btn.disabled = false; btn.textContent = original;
+    }
+  }
+
+  function buildRemitoPdf(res, byId){
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit:'mm', format:'a4' });
+    var pageW = doc.internal.pageSize.getWidth();
+    var pageH = doc.internal.pageSize.getHeight();
+    var margin = 16;
+    var contentW = pageW - margin*2;
+    var INK=[27,36,47], MUTED=[91,102,114], ACCENT=[30,110,119], BORDER=[220,226,231];
+
+    function header(){
+      doc.setFillColor(ACCENT[0],ACCENT[1],ACCENT[2]);
+      doc.rect(0,0,pageW,26,'F');
+      doc.setTextColor(255,255,255);
+      doc.setFont('helvetica','bold'); doc.setFontSize(16);
+      doc.text('MOBIHUB', margin, 15);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text('Mobiliario para eventos', margin, 21);
+      doc.setFont('helvetica','bold'); doc.setFontSize(13);
+      doc.text('REMITO', pageW-margin, 14, {align:'right'});
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text('N.º '+String(res.id||'').replace(/^res-/i,'').toUpperCase(), pageW-margin, 20, {align:'right'});
+    }
+    function footer(){
+      doc.setDrawColor(BORDER[0],BORDER[1],BORDER[2]); doc.setLineWidth(0.3);
+      doc.line(margin, pageH-14, pageW-margin, pageH-14);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(MUTED[0],MUTED[1],MUTED[2]);
+      doc.text('Mobihub · Remito — documento no válido como factura', margin, pageH-9);
+      doc.text(new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}), pageW-margin, pageH-9, {align:'right'});
+    }
+    function field(label, value, x, yy, w){
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(MUTED[0],MUTED[1],MUTED[2]);
+      doc.text(label.toUpperCase(), x, yy);
+      doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(INK[0],INK[1],INK[2]);
+      var lines = doc.splitTextToSize(value||'—', w);
+      doc.text(lines, x, yy+4.8);
+      return lines.length*5 + 4.8;
+    }
+
+    header(); footer();
+    var y = 38;
+    doc.setTextColor(INK[0],INK[1],INK[2]); doc.setFont('helvetica','bold'); doc.setFontSize(15);
+    var titleLines = doc.splitTextToSize(res.event||'Evento', contentW);
+    doc.text(titleLines, margin, y);
+    y += titleLines.length*6.4;
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(MUTED[0],MUTED[1],MUTED[2]);
+    doc.text(STATUS_LABEL[res.status] || res.status || '', margin, y);
+    y += 9;
+
+    var colW = (contentW-10)/2;
+    var h1 = field('Cliente', res.client, margin, y, colW);
+    var h2 = field('Fechas de entrega / devolución', fmtRange(res.start,res.end), margin+colW+10, y, colW);
+    y += Math.max(h1,h2) + 5;
+    var h3 = field('Dirección de entrega', res.address, margin, y, contentW);
+    y += h3 + 7;
+
+    // tabla de items
+    var rowH = 8, qtyColW = 26;
+    doc.setFillColor(245,246,248);
+    doc.rect(margin, y, contentW, rowH, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(INK[0],INK[1],INK[2]);
+    doc.text('CANTIDAD', margin+3, y+5.5);
+    doc.text('MOBILIARIO', margin+qtyColW+3, y+5.5);
+    y += rowH;
+
+    var rows = res.items || [];
+    for(var i=0;i<rows.length;i++){
+      var name = (byId[rows[i].itemId] && byId[rows[i].itemId].name) || rows[i].itemId;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10);
+      var nameLines = doc.splitTextToSize(name, contentW-qtyColW-6);
+      var rowHeight = Math.max(rowH, nameLines.length*5 + 3);
+      if(y + rowHeight > pageH - 46){ doc.addPage(); header(); footer(); y = 34; }
+      doc.setTextColor(INK[0],INK[1],INK[2]);
+      doc.text(String(rows[i].qty), margin+3, y+5.5);
+      doc.text(nameLines, margin+qtyColW+3, y+5.5);
+      doc.setDrawColor(BORDER[0],BORDER[1],BORDER[2]);
+      doc.line(margin, y+rowHeight, margin+contentW, y+rowHeight);
+      y += rowHeight;
+    }
+    y += 5;
+
+    if(!rows.length){
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(MUTED[0],MUTED[1],MUTED[2]);
+      doc.text('Sin ítems cargados.', margin, y);
+      y += 8;
+    }
+
+    if(res.notes){
+      if(y + 16 > pageH - 46){ doc.addPage(); header(); footer(); y = 34; }
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(MUTED[0],MUTED[1],MUTED[2]);
+      doc.text('OBSERVACIONES', margin, y); y += 5;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(INK[0],INK[1],INK[2]);
+      var noteLines = doc.splitTextToSize(res.notes, contentW);
+      doc.text(noteLines, margin, y);
+      y += noteLines.length*5 + 8;
+    }
+
+    // firmas
+    var sigY = Math.max(y+18, pageH-40);
+    if(sigY > pageH - 20){ doc.addPage(); header(); footer(); sigY = 70; }
+    var sigW = (contentW-14)/2;
+    doc.setDrawColor(BORDER[0],BORDER[1],BORDER[2]);
+    doc.line(margin, sigY, margin+sigW, sigY);
+    doc.line(margin+sigW+14, sigY, margin+contentW, sigY);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(MUTED[0],MUTED[1],MUTED[2]);
+    doc.text('Entrega — Mobihub', margin, sigY+5);
+    doc.text('Recibí conforme — Cliente', margin+sigW+14, sigY+5);
+
+    return doc;
+  }
+
+  // ---------- exportar inventario a Excel ----------
+  function buildInventoryWorkbook(){
+    var wb = XLSX.utils.book_new();
+
+    var rows1 = [['Depósito','Categoría','Unidad','Total','Reservado','Afuera ahora','En revisión','En limpieza','Dañado','Disponible']];
+    depositos.forEach(function(d){
+      items.forEach(function(i){
+        var st = itemStats(i, d.id);
+        rows1.push([d.name, i.name, i.unit||'unidades', st.total, st.reserved, st.out, st.enRevision, st.enLimpieza, st.danado, st.available]);
+      });
+    });
+    var ws1 = XLSX.utils.aoa_to_sheet(rows1);
+    ws1['!cols'] = [{wch:20},{wch:26},{wch:10},{wch:8},{wch:10},{wch:12},{wch:10},{wch:10},{wch:9},{wch:11}];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Stock por depósito');
+
+    var rows2 = [['Categoría','Unidad','Total','Reservado','Afuera ahora','Fuera de servicio','Disponible']];
+    items.forEach(function(i){
+      var st = itemStats(i, 'all');
+      rows2.push([i.name, i.unit||'unidades', st.total, st.reserved, st.out, st.outOfService, st.available]);
+    });
+    var ws2 = XLSX.utils.aoa_to_sheet(rows2);
+    ws2['!cols'] = [{wch:26},{wch:10},{wch:8},{wch:10},{wch:12},{wch:14},{wch:11}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Resumen por categoría');
+
+    var rows3 = [['Depósito','Dirección','Piezas totales']];
+    depositos.forEach(function(d){
+      var total = items.reduce(function(s,i){ return s + itemStockTotals(i.id, d.id).total; }, 0);
+      rows3.push([d.name, d.address||'', total]);
+    });
+    var ws3 = XLSX.utils.aoa_to_sheet(rows3);
+    ws3['!cols'] = [{wch:22},{wch:30},{wch:14}];
+    XLSX.utils.book_append_sheet(wb, ws3, 'Depósitos');
+
+    return wb;
+  }
+  function s2ab(s){
+    var buf = new ArrayBuffer(s.length);
+    var view = new Uint8Array(buf);
+    for(var i=0;i<s.length;i++) view[i] = s.charCodeAt(i) & 0xFF;
+    return buf;
+  }
+  async function exportInventoryExcel(btn){
+    var original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Generando…';
+    try{
+      var xlsxReady = await ensureXlsx();
+      if(!xlsxReady) throw {code:'lib'};
+      var wb = buildInventoryWorkbook();
+      var wbout = XLSX.write(wb, {bookType:'xlsx', type:'binary'});
+      var blob = new Blob([s2ab(wbout)], {type:'application/octet-stream'});
+      downloadBlob('inventario-mobihub.xlsx', blob);
+    }catch(err){
+      if(err && err.code==='declined'){ /* el usuario canceló, nada que avisar */ }
+      else if(err && err.code==='lib'){ showToast('No se pudo cargar el generador de Excel. Probá de nuevo.', true); }
+      else if(err && err.code==='no-downloads'){ showToast('La descarga de archivos no está disponible en esta vista.', true); }
+      else { showToast('No se pudo generar el Excel. Probá de nuevo.', true); }
+    } finally {
+      btn.disabled = false; btn.textContent = original;
+    }
+  }
+
+  // ---------- reservas ----------
+  function renderReservas(){
+    var html = '<section><div class="section-head"><h2>Reservas</h2><button class="btn btn-primary" id="btn-new-res">+ Nueva reserva</button></div>';
+    html += depositoBarHtml();
+    html += '<div class="res-toolbar" style="margin:14px 0;">'+
+      '<select id="res-filter">'+
+        '<option value="activas">Activas</option><option value="todas">Todas</option>'+
+        STATUS_ORDER.map(function(s){ return '<option value="'+s+'">'+STATUS_LABEL[s]+'</option>'; }).join('')+
+      '</select>'+
+      '<input type="search" id="res-search" placeholder="Buscar por evento o cliente…" style="min-width:220px;">'+
+      '</div>';
+
+    var list = reservations.filter(function(r){
+      if(currentDepositoId!=='all' && r.depositoId!==currentDepositoId) return false;
+      if(resFilter==='activas' && (r.status==='cancelada' || r.status==='devuelta')) return false;
+      if(resFilter!=='activas' && resFilter!=='todas' && r.status!==resFilter) return false;
+      if(resSearch && (r.event+' '+r.client).toLowerCase().indexOf(resSearch.toLowerCase())===-1) return false;
+      return true;
+    }).sort(function(a,b){ return a.start.localeCompare(b.start); });
+
+    html += '<div class="res-list">';
+    if(!list.length){ html += '<div class="empty-state">No hay reservas que coincidan con el filtro.</div>'; }
+    else{ html += list.map(renderResCard).join(''); }
+    html += '</div></section>';
+
+    document.getElementById('view').innerHTML = html;
+    bindDepositoBar();
+    document.getElementById('btn-new-res').onclick = openNewReservationModal;
+    document.getElementById('res-filter').value = resFilter;
+    document.getElementById('res-filter').onchange = function(e){ resFilter = e.target.value; renderReservas(); };
+    document.getElementById('res-search').value = resSearch;
+    document.getElementById('res-search').oninput = function(e){ resSearch = e.target.value; renderReservas(); };
+    bindResCardActions();
+  }
+
+  function renderResCard(r){
+    var byId = itemsById();
+    var chips = (r.items||[]).map(function(row){
+      var nm = byId[row.itemId] ? byId[row.itemId].name : row.itemId;
+      return '<span class="chip"><b>'+row.qty+'</b> · '+esc(nm)+'</span>';
+    }).join('');
+    var nextOptions = STATUS_ORDER.map(function(s){ return '<option value="'+s+'"'+(s===r.status?' selected':'')+'>'+STATUS_LABEL[s]+'</option>'; }).join('');
+    return '<div class="res-card status-'+r.status+'" data-res="'+esc(r.id)+'">'+
+      '<div><div class="res-title">'+esc(r.event)+'</div><div class="res-client">'+esc(r.client)+'</div>'+(r.notes?'<div class="res-address">'+esc(r.notes)+'</div>':'')+'</div>'+
+      '<div><div class="res-dates mono">'+fmtRange(r.start,r.end)+'</div><div class="res-address">'+esc(r.address||'')+'</div>'+(r.depositoId?'<span class="ficha-tag">'+esc(depositoName(r.depositoId))+'</span>':'')+'</div>'+
+      '<div><div class="chip-row">'+chips+'</div></div>'+
+      '<div class="res-actions"><span class="pill '+STATUS_PILL[r.status]+'">'+STATUS_LABEL[r.status]+'</span>'+
+        '<select class="status-select" data-id="'+esc(r.id)+'">'+nextOptions+'</select>'+
+        '<button type="button" class="btn btn-secondary btn-sm remito-btn" data-id="'+esc(r.id)+'">🧾 Remito</button>'+
+      '</div></div>';
+  }
+
+  function bindResCardActions(){
+    document.querySelectorAll('.remito-btn').forEach(function(btn){
+      btn.onclick = function(){ exportRemito(btn.dataset.id, btn); };
+    });
+    document.querySelectorAll('.status-select').forEach(function(sel){
+      sel.onchange = function(){ updateReservationStatus(sel.dataset.id, sel.value); };
+    });
+  }
+
+  function openNewReservationModal(){
+    if(!depositos.length){
+      openModal('<h3>Nueva reserva</h3><p class="modal-sub">Todavía no hay depósitos cargados. Creá uno primero con "+ Depósito".</p>', [{label:'Cerrar', cls:'btn-secondary', action: closeModal}]);
+      return;
+    }
+    var defaultDep = (currentDepositoId!=='all' && depositosById()[currentDepositoId]) ? currentDepositoId : depositos[0].id;
+    var draft = { items:[{itemId:'', qty:1}], depositoId: defaultDep };
+    var startEl, endEl, depEl;
+
+    function depositoOptions(){
+      return depositos.map(function(d){ return '<option value="'+esc(d.id)+'"'+(d.id===draft.depositoId?' selected':'')+'>'+esc(d.name)+'</option>'; }).join('');
+    }
+    function itemOptions(selected){
+      return '<option value="">Elegir…</option>' + items.map(function(i){ return '<option value="'+esc(i.id)+'"'+(i.id===selected?' selected':'')+'>'+esc(i.name)+'</option>'; }).join('');
+    }
+    function availText(itemId, depositoId, start, end, qty){
+      if(!itemId || !depositoId || !start || !end) return '';
+      var totals = itemStockTotals(itemId, depositoId);
+      var committed = committedQty(itemId, depositoId, start, end, ['pendiente','confirmada','en_evento']);
+      var oos = totals.enRevision + totals.enLimpieza + totals.danado;
+      var free = totals.total - committed - oos;
+      var warn = qty > free;
+      return '<div class="avail-hint'+(warn?' warn':'')+'">Disponible en esas fechas en '+esc(depositoName(depositoId))+': '+free+' de '+totals.total+(warn?' — no alcanza, ajustá la cantidad o las fechas.':'')+'</div>';
+    }
+    function rowsHtml(){
+      return draft.items.map(function(row,idx){
+        var start = startEl ? startEl.value : '';
+        var end = endEl ? endEl.value : (startEl?startEl.value:'');
+        return '<div class="item-row" data-row="'+idx+'">'+
+          '<select data-row="'+idx+'" data-field="itemId">'+itemOptions(row.itemId)+'</select>'+
+          '<input data-row="'+idx+'" data-field="qty" type="number" min="1" step="1" value="'+row.qty+'">'+
+          '<button type="button" class="remove-row" data-row="'+idx+'" title="Quitar">×</button>'+
+          availText(row.itemId, draft.depositoId, start, end, row.qty)+
+          '</div>';
+      }).join('');
+    }
+
+    var body =
+      '<h3>Nueva reserva</h3><p class="modal-sub">Reservá mobiliario para un evento y controlá la disponibilidad.</p>'+
+      '<div id="modal-error"></div>'+
+      '<div class="field"><label>Depósito</label><select id="f-deposito">'+depositoOptions()+'</select></div>'+
+      '<div class="field"><label>Evento</label><input id="f-event" type="text" placeholder="Ej: Cumpleaños de 15 — Martina"></div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label>Cliente</label><input id="f-client" type="text" placeholder="Nombre o razón social"></div>'+
+        '<div class="field"><label>Dirección</label><input id="f-address" type="text" placeholder="Salón, quinta, domicilio…"></div>'+
+      '</div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label>Fecha inicio</label><input id="f-start" type="date" value="'+today()+'"></div>'+
+        '<div class="field"><label>Fecha fin</label><input id="f-end" type="date" value="'+today()+'"></div>'+
+      '</div>'+
+      '<div class="field"><label>Mobiliario</label><div id="item-rows"></div>'+
+      '<button type="button" class="btn-text" id="add-row">+ Agregar ítem</button></div>'+
+      '<div class="field"><label>Notas</label><textarea id="f-notes" placeholder="Horarios de entrega, condiciones, etc."></textarea></div>';
+
+    openModal(body, [
+      {label:'Cancelar', cls:'btn-secondary', action: closeModal},
+      {label:'Crear reserva', cls:'btn-primary', action: function(){
+        var event = document.getElementById('f-event').value.trim();
+        var client = document.getElementById('f-client').value.trim();
+        var address = document.getElementById('f-address').value.trim();
+        var start = document.getElementById('f-start').value;
+        var end = document.getElementById('f-end').value;
+        var notes = document.getElementById('f-notes').value.trim();
+        if(!draft.depositoId){ showModalError('Elegí un depósito.'); return; }
+        if(!event || !client){ showModalError('Completá el evento y el cliente.'); return; }
+        if(!start || !end || end<start){ showModalError('Revisá las fechas: la de fin no puede ser anterior a la de inicio.'); return; }
+        var rows = draft.items.filter(function(r){ return r.itemId && Number(r.qty)>0; });
+        if(!rows.length){ showModalError('Agregá al menos un ítem con cantidad.'); return; }
+        var id = 'res-'+uid();
+        saveReservation({ id:id, event:event, client:client, address:address, start:start, end:end, status:'pendiente', depositoId:draft.depositoId, items:rows, notes:notes, createdBy:actorName(), lastAction:'creó la reserva' });
+        closeModal();
+      }}
+    ]);
+
+    startEl = document.getElementById('f-start');
+    endEl = document.getElementById('f-end');
+    depEl = document.getElementById('f-deposito');
+    var rowsContainer = document.getElementById('item-rows');
+
+    function refreshRows(){ rowsContainer.innerHTML = rowsHtml(); bindRowEvents(); }
+    function bindRowEvents(){
+      rowsContainer.querySelectorAll('select[data-field="itemId"]').forEach(function(sel){
+        sel.onchange = function(){ draft.items[+sel.dataset.row].itemId = sel.value; refreshRows(); };
+      });
+      rowsContainer.querySelectorAll('input[data-field="qty"]').forEach(function(inp){
+        inp.oninput = function(){ draft.items[+inp.dataset.row].qty = parseInt(inp.value,10)||0; refreshRows(); };
+      });
+      rowsContainer.querySelectorAll('.remove-row').forEach(function(btn){
+        btn.onclick = function(){ if(draft.items.length>1){ draft.items.splice(+btn.dataset.row,1); refreshRows(); } };
+      });
+    }
+    document.getElementById('add-row').onclick = function(){ draft.items.push({itemId:'', qty:1}); refreshRows(); };
+    depEl.onchange = function(){ draft.depositoId = depEl.value; refreshRows(); };
+    startEl.onchange = refreshRows; endEl.onchange = refreshRows;
+    refreshRows();
+  }
+
+  // ---------- modal shell ----------
+  var modalOnClose = null;
+  var modalOnDataChange = null;
+  function openModal(bodyHtml, buttons, opts){
+    opts = opts || {};
+    var root = document.getElementById('modal-root');
+    var footer = buttons.map(function(b,idx){ return '<button class="btn '+b.cls+'" data-btn="'+idx+'">'+esc(b.label)+'</button>'; }).join('');
+    var footerHtml = '<div class="modal-footer">'+footer+'</div>';
+    root.innerHTML = '<div class="modal-backdrop" id="modal-backdrop"><div class="modal'+(opts.wide?' modal-lg':'')+'" role="dialog" aria-modal="true">'+bodyHtml+footerHtml+'</div></div>';
+    buttons.forEach(function(b,idx){ root.querySelector('[data-btn="'+idx+'"]').onclick = b.action; });
+    document.getElementById('modal-backdrop').addEventListener('click', function(e){ if(e.target.id==='modal-backdrop') closeModal(); });
+    document.addEventListener('keydown', escListener);
+    modalOnClose = opts.onClose || null;
+    modalOnDataChange = opts.onDataChange || null;
+    var firstInput = root.querySelector('input, select, textarea');
+    if(firstInput) firstInput.focus();
+  }
+  function escListener(e){ if(e.key==='Escape') closeModal(); }
+  function closeModal(){
+    document.getElementById('modal-root').innerHTML='';
+    document.removeEventListener('keydown', escListener);
+    modalOnDataChange = null;
+    if(modalOnClose){ try{ modalOnClose(); }catch(e){} modalOnClose = null; }
+  }
+  function showModalError(msg){
+    var el = document.getElementById('modal-error');
+    if(el) el.innerHTML = '<div class="form-error">'+esc(msg)+'</div>';
+  }
+
+  // ---------- boot ----------
+  initDb();
+})();
+</script>
+</body>
+</html>
